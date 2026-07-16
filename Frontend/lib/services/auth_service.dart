@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -12,6 +13,7 @@ class AuthUser {
     required this.fullName,
     required this.role,
     required this.avatarKey,
+    this.avatarB64,
   });
 
   final String id;
@@ -19,6 +21,7 @@ class AuthUser {
   final String fullName;
   final String role;
   final String avatarKey;
+  final String? avatarB64;
 
   static String normalizeRole(String? raw) {
     final r = (raw ?? '').trim().toUpperCase();
@@ -39,6 +42,7 @@ class AuthUser {
         appMeta['role'] as String? ??
         fallbackRole;
     final normalized = normalizeRole(raw);
+    final b64 = (meta['avatar_b64'] as String?)?.trim();
     return AuthUser(
       id: user.id,
       email: user.email ?? '',
@@ -47,6 +51,7 @@ class AuthUser {
           : 'Unknown',
       role: normalized.isEmpty ? 'PATIENT' : normalized,
       avatarKey: (meta['avatar_key'] as String?)?.trim() ?? 'person',
+      avatarB64: (b64 != null && b64.isNotEmpty) ? b64 : null,
     );
   }
 
@@ -56,6 +61,8 @@ class AuthUser {
     final normalized = normalizeRole(
       metaMap?['role'] as String? ?? json['role'] as String?,
     );
+    final b64 = (metaMap?['avatar_b64'] as String?)?.trim() ??
+        (json['avatar_b64'] as String?)?.trim();
     return AuthUser(
       id: json['id'] as String? ?? json['sub'] as String? ?? '',
       email: json['email'] as String? ?? '',
@@ -64,19 +71,26 @@ class AuthUser {
           'Unknown',
       role: normalized.isEmpty ? 'PATIENT' : normalized,
       avatarKey: metaMap?['avatar_key'] as String? ?? 'person',
+      avatarB64: (b64 != null && b64.isNotEmpty) ? b64 : null,
     );
   }
 
   bool get isPatient => role == 'PATIENT';
   bool get isPsychiatrist => role == 'PSYCHIATRIST';
 
-  AuthUser copyWith({String? role, String? fullName, String? avatarKey}) {
+  AuthUser copyWith({
+    String? role,
+    String? fullName,
+    String? avatarKey,
+    String? avatarB64,
+  }) {
     return AuthUser(
       id: id,
       email: email,
       fullName: fullName ?? this.fullName,
       role: role ?? this.role,
       avatarKey: avatarKey ?? this.avatarKey,
+      avatarB64: avatarB64 ?? this.avatarB64,
     );
   }
 }
@@ -102,7 +116,6 @@ class SignUpNeedsVerification extends SignUpOutcome {
   final String email;
 }
 
-/// App-level auth error (separate from Supabase [AuthException]).
 class AuthFailure implements Exception {
   AuthFailure(this.message);
   final String message;
@@ -115,9 +128,14 @@ class AuthService {
   AuthService._();
   static final AuthService instance = AuthService._();
 
+  final ValueNotifier<int> profileRevision = ValueNotifier<int>(0);
+
+  void notifyProfileChanged() {
+    profileRevision.value++;
+  }
+
   GoTrueClient get _auth => Supabase.instance.client.auth;
 
-  /// Same key supabase_flutter uses for SharedPreferences session storage.
   static String persistSessionKeyForUrl(String supabaseUrl) {
     final host = Uri.parse(supabaseUrl).host;
     final projectRef = host.split('.').first;
@@ -130,15 +148,12 @@ class AuthService {
     return persistSessionKeyForUrl(url);
   }
 
-  /// Must match Supabase → Authentication → URL Configuration → Redirect URLs.
   String get authRedirectUrl {
     final fromEnv = dotenv.env['SUPABASE_AUTH_REDIRECT']?.trim();
     if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;
     return 'curamind://auth-callback';
   }
 
-  /// Write session to SharedPreferences so cold start can restore it.
-  /// (Backup — supabase_flutter also persists via its auth listener.)
   Future<void> persistSession(Session session) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(persistSessionKey, jsonEncode(session.toJson()));
@@ -159,7 +174,6 @@ class AuthService {
     return n.isEmpty ? 'PATIENT' : n;
   }
 
-  /// Resolves role from metadata, then local backup (for cold start).
   Future<AuthUser> resolveUser(User user) async {
     final metaRole = AuthUser.normalizeRole(
       user.userMetadata?['role'] as String? ??
@@ -198,7 +212,6 @@ class AuthService {
     return next;
   }
 
-  /// Re-apply any stored session after [Supabase.initialize] (awaited).
   Future<Session?> restorePersistedSession() async {
     final existing = _auth.currentSession;
     if (existing != null) return existing;
@@ -211,7 +224,6 @@ class AuthService {
       await _auth.recoverSession(raw);
       return _auth.currentSession;
     } catch (_) {
-      // Stale/invalid token — clear so we don't loop on a bad session.
       await prefs.remove(persistSessionKey);
       return null;
     }
@@ -410,9 +422,15 @@ class AuthService {
     final meta = Map<String, dynamic>.from(user.userMetadata ?? {});
     meta['full_name'] = nextName;
     meta['avatar_key'] = avatarKey.trim().isEmpty ? 'person' : avatarKey.trim();
+    final existingB64 = (user.userMetadata?['avatar_b64'] as String?)?.trim();
+    if (existingB64 != null && existingB64.isNotEmpty) {
+      meta['avatar_b64'] = existingB64;
+    }
+    meta.remove('avatar_url');
     try {
       final updated = await _auth.updateUser(UserAttributes(data: meta));
       final nextUser = updated.user ?? _auth.currentUser ?? user;
+      notifyProfileChanged();
       return resolveUser(nextUser);
     } catch (e) {
       throw AuthFailure(_friendlyError(e));
@@ -444,14 +462,9 @@ class AuthService {
   Stream<AuthState> get onAuthStateChange => _auth.onAuthStateChange;
 
   Future<void> logout() async {
-    final user = _auth.currentUser;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(persistSessionKey);
-    // Keep curamind_role_* so role survives re-login if metadata is flaky.
     await _auth.signOut();
-    if (user != null) {
-      // no-op placeholder — role backup retained on purpose
-    }
   }
 
   String _friendlyError(Object e) {

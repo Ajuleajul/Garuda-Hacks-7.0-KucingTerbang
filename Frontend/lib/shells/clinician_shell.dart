@@ -84,6 +84,7 @@ class _ClinicianShellState extends State<ClinicianShell> {
         onDestinationSelected: _go,
         userLabel: 'Clinic',
         showNav: !mobile,
+        profileIndex: ClinicianShell.destinations.length - 1,
       ),
       body: SizedBox.expand(child: _pages[_index]),
       bottomNavigationBar: mobile

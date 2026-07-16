@@ -1,18 +1,13 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/auth_service.dart';
+import '../../services/profile_photo_service.dart';
 import '../../theme/curamind_theme.dart';
+import '../../widgets/notification_settings_card.dart';
 import 'AuthGate.dart';
-
-const _avatarChoices = <String, IconData>{
-  'person': Icons.person_outline_rounded,
-  'favorite': Icons.favorite_outline_rounded,
-  'selfcare': Icons.spa_outlined,
-  'book': Icons.menu_book_outlined,
-  'star': Icons.star_outline_rounded,
-  'sun': Icons.wb_sunny_outlined,
-};
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({
@@ -40,12 +35,13 @@ class _ProfilePageState extends State<ProfilePage> {
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  String _avatarKey = 'person';
+  Uint8List? _photoBytes;
   bool _obscureCurrent = true;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _savingPassword = false;
   bool _savingProfile = false;
+  bool _pickingPhoto = false;
 
   @override
   void initState() {
@@ -55,11 +51,13 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _bootstrap() async {
     final user = await AuthService.instance.resolveCurrentUser();
+    final bytes = await ProfilePhotoService.instance.loadBytes();
     if (!mounted) return;
     setState(() {
       _nameController.text = user?.fullName ?? widget.name;
-      _roleController.text = user?.role == 'PSYCHIATRIST' ? 'Psychiatrist' : widget.role;
-      _avatarKey = user?.avatarKey ?? 'person';
+      _roleController.text =
+          user?.role == 'PSYCHIATRIST' ? 'Psychiatrist' : widget.role;
+      _photoBytes = bytes;
     });
   }
 
@@ -118,13 +116,12 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final user = await AuthService.instance.updateProfile(
         fullName: _nameController.text,
-        avatarKey: _avatarKey,
+        avatarKey: 'photo',
       );
       if (!mounted) return;
       setState(() {
         _savingProfile = false;
         _nameController.text = user.fullName;
-        _avatarKey = user.avatarKey;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -152,64 +149,39 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> _pickAvatar() async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: CuramindColors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: _avatarChoices.entries.map((entry) {
-              final selected = entry.key == _avatarKey;
-              return InkWell(
-                borderRadius: BorderRadius.circular(18),
-                onTap: () => Navigator.of(ctx).pop(entry.key),
-                child: Container(
-                  width: 88,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? CuramindColors.sageSoft
-                        : CuramindColors.surface,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: selected
-                          ? CuramindColors.sage
-                          : CuramindColors.mistBlue,
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        entry.value,
-                        color: CuramindColors.ocean,
-                        size: 28,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        entry.key,
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          color: CuramindColors.inkMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
+  Future<void> _pickPhoto() async {
+    setState(() => _pickingPhoto = true);
+    try {
+      final bytes = await ProfilePhotoService.instance.pickAndSave();
+      if (!mounted) return;
+      if (bytes != null) {
+        setState(() => _photoBytes = bytes);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: CuramindColors.sageDeep,
+            content: Text(
+              'Profile photo updated.',
+              style: GoogleFonts.outfit(color: CuramindColors.white),
+            ),
           ),
         );
-      },
-    );
-    if (picked == null || !mounted) return;
-    setState(() => _avatarKey = picked);
+      }
+    } on AuthFailure catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: CuramindColors.danger,
+          content: Text(
+            e.message,
+            style: GoogleFonts.outfit(color: CuramindColors.white),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _pickingPhoto = false);
+    }
   }
 
   Future<void> _logOut() async {
@@ -263,8 +235,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 _ProfileHeader(
                   nameController: _nameController,
                   roleController: _roleController,
-                  avatarKey: _avatarKey,
-                  onPickAvatar: _pickAvatar,
+                  photoBytes: _photoBytes,
+                  pickingPhoto: _pickingPhoto,
+                  onPickPhoto: _pickPhoto,
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
@@ -280,6 +253,8 @@ class _ProfilePageState extends State<ProfilePage> {
                         )
                       : const Text('Save profile'),
                 ),
+                const SizedBox(height: 28),
+                const NotificationSettingsCard(),
                 const SizedBox(height: 36),
                 Text(
                   'Change Password',
@@ -319,23 +294,22 @@ class _ProfilePageState extends State<ProfilePage> {
                         label: 'New Password',
                         controller: _newPasswordController,
                         obscure: _obscureNew,
-                        onToggleObscure: () => setState(
-                          () => _obscureNew = !_obscureNew,
-                        ),
+                        onToggleObscure: () =>
+                            setState(() => _obscureNew = !_obscureNew),
                         textInputAction: TextInputAction.next,
                         validator: (v) {
-                          if (v == null || v.length < 6) {
-                            return 'New password must be at least 6 characters';
+                          if (v == null || v.isEmpty) {
+                            return 'New password is required';
                           }
-                          if (v == _currentPasswordController.text) {
-                            return 'New password must be different';
+                          if (v.length < 6) {
+                            return 'Password must be at least 6 characters';
                           }
                           return null;
                         },
                       ),
                       const SizedBox(height: 14),
                       _PasswordField(
-                        label: 'Re-confirm Password',
+                        label: 'Confirm New Password',
                         controller: _confirmPasswordController,
                         obscure: _obscureConfirm,
                         onToggleObscure: () => setState(
@@ -367,30 +341,10 @@ class _ProfilePageState extends State<ProfilePage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 40),
-                Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 200),
-                    child: OutlinedButton(
-                      onPressed: _logOut,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: CuramindColors.ocean,
-                        side: const BorderSide(
-                          color: CuramindColors.slate,
-                          width: 1.4,
-                        ),
-                        minimumSize: const Size.fromHeight(48),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        textStyle: GoogleFonts.outfit(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      child: const Text('Log out'),
-                    ),
-                  ),
+                const SizedBox(height: 28),
+                OutlinedButton(
+                  onPressed: _logOut,
+                  child: const Text('Sign out'),
                 ),
               ],
             ),
@@ -420,36 +374,48 @@ class _ProfileHeader extends StatelessWidget {
   const _ProfileHeader({
     required this.nameController,
     required this.roleController,
-    required this.avatarKey,
-    required this.onPickAvatar,
+    required this.photoBytes,
+    required this.pickingPhoto,
+    required this.onPickPhoto,
   });
 
   final TextEditingController nameController;
   final TextEditingController roleController;
-  final String avatarKey;
-  final VoidCallback onPickAvatar;
+  final Uint8List? photoBytes;
+  final bool pickingPhoto;
+  final VoidCallback onPickPhoto;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Container(
+        SizedBox(
           width: 96,
           height: 96,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: CuramindColors.mistBlue,
-            border: Border.all(color: CuramindColors.slate, width: 1.4),
-          ),
           child: Stack(
             children: [
-              Center(
-                child: Icon(
-                  _avatarChoices[avatarKey] ?? Icons.person_outline_rounded,
-                  size: 36,
-                  color: CuramindColors.ocean,
+              Container(
+                width: 96,
+                height: 96,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: CuramindColors.mistBlue,
+                  border: Border.all(color: CuramindColors.slate, width: 1.4),
+                  image: photoBytes != null
+                      ? DecorationImage(
+                          image: MemoryImage(photoBytes!),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
                 ),
+                child: photoBytes == null
+                    ? const Icon(
+                        Icons.person_outline_rounded,
+                        size: 36,
+                        color: CuramindColors.ocean,
+                      )
+                    : null,
               ),
               Positioned(
                 right: 0,
@@ -459,14 +425,23 @@ class _ProfileHeader extends StatelessWidget {
                   shape: const CircleBorder(),
                   child: InkWell(
                     customBorder: const CircleBorder(),
-                    onTap: onPickAvatar,
-                    child: const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Icon(
-                        Icons.photo_camera_outlined,
-                        size: 18,
-                        color: CuramindColors.white,
-                      ),
+                    onTap: pickingPhoto ? null : onPickPhoto,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: pickingPhoto
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: CuramindColors.white,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.upload_rounded,
+                              size: 18,
+                              color: CuramindColors.white,
+                            ),
                     ),
                   ),
                 ),
@@ -491,6 +466,15 @@ class _ProfileHeader extends StatelessWidget {
                 readOnly: true,
                 decoration: const InputDecoration(
                   labelText: 'Role',
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: pickingPhoto ? null : onPickPhoto,
+                  icon: const Icon(Icons.photo_library_outlined, size: 18),
+                  label: const Text('Upload photo'),
                 ),
               ),
             ],

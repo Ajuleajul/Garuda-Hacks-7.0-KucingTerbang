@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'pages/patient/AuthGate.dart';
 import 'services/auth_service.dart';
+import 'services/reminder_service.dart';
 import 'theme/curamind_theme.dart';
 import 'animated_cursor.dart';
 
@@ -25,7 +26,6 @@ Future<void> main() async {
     );
   }
 
-  // Warm prefs once; let Supabase call SharedPreferencesLocalStorage.initialize().
   await SharedPreferences.getInstance();
 
   await Supabase.initialize(
@@ -39,8 +39,8 @@ Future<void> main() async {
     ),
   );
 
-  // Awaited restore — supabase_flutter's recoverSession() is fire-and-forget.
   await AuthService.instance.restorePersistedSession();
+  await ReminderService.instance.init();
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(

@@ -20,12 +20,9 @@ model User {
   role       Role
   created_at DateTime @default(now())
 
-  mood_logs                     MoodLog[] 
+  mood_logs                     MoodLog[]
   patient_links                 PatientPsychiatristLink[] @relation("PatientLinks")
   psychiatrist_links            PatientPsychiatristLink[] @relation("PsychiatristLinks")
-  patient_medications           Medication[]              @relation("PatientMedications")
-  psychiatrist_prescriptions    Medication[]              @relation("PsychiatristPrescriptions")
-  medication_logs               MedicationLog[]           @relation("PatientMedicationLogs")
   patient_notes                 SessionNote[]             @relation("PatientSessionNotes")
   psychiatrist_notes            SessionNote[]             @relation("PsychiatristSessionNotes")
 }
@@ -125,29 +122,33 @@ model PatientPsychiatristLink {
 }
 
 model Medication {
-  id              String     @id @default(uuid())
-  patient_id      String
-  psychiatrist_id String
-  name            String
-  dosage_and_freq String
-  is_active       Boolean    @default(true)
-  created_at      DateTime   @default(now())
+  id               String   @id @default(uuid())
+  patient_id       String
+  patient_name     String?
+  psychiatrist_id  String
+  name             String
+  dosage_and_freq  String
+  is_active        Boolean  @default(true)
+  created_at       DateTime @default(now())
 
-  patient         User       @relation("PatientMedications", fields: [patient_id], references: [id])
-  psychiatrist    User       @relation("PsychiatristPrescriptions", fields: [psychiatrist_id], references: [id])
-  
-  logs            MedicationLog[]
+  logs             MedicationLog[]
+
+  @@index([patient_id])
+  @@index([psychiatrist_id])
 }
 
 model MedicationLog {
-  id              String     @id @default(uuid())
-  medication_id   String
-  patient_id      String
-  status          LogStatus
-  logged_at       DateTime   @default(now())
+  id             String    @id @default(uuid())
+  medication_id  String
+  patient_id     String
+  status         LogStatus
+  day_key        String
+  logged_at      DateTime  @default(now())
 
-  medication      Medication @relation(fields: [medication_id], references: [id])
-  patient         User       @relation("PatientMedicationLogs", fields: [patient_id], references: [id])
+  medication     Medication @relation(fields: [medication_id], references: [id])
+
+  @@unique([medication_id, day_key])
+  @@index([patient_id, logged_at])
 }
 
 model SessionNote {

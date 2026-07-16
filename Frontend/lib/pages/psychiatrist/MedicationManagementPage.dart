@@ -2,33 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../animated_cursor.dart';
+import '../../services/medication_service.dart';
 import '../../theme/curamind_theme.dart';
-
-class Medication {
-  String id;
-  String patient;
-  String name;
-  String dosage;
-  String frequency;
-  String status;
-  double refillProgress;
-  int durationDays;
-  int refillsRemaining;
-  String notes;
-
-  Medication({
-    required this.id,
-    required this.patient,
-    required this.name,
-    required this.dosage,
-    required this.frequency,
-    required this.status,
-    required this.refillProgress,
-    this.durationDays = 30,
-    this.refillsRemaining = 0,
-    this.notes = '',
-  });
-}
 
 class MedicationManagementPage extends StatefulWidget {
   const MedicationManagementPage({
@@ -39,94 +14,117 @@ class MedicationManagementPage extends StatefulWidget {
   final bool embedded;
 
   @override
-  State<MedicationManagementPage> createState() => _MedicationManagementPageState();
+  State<MedicationManagementPage> createState() =>
+      _MedicationManagementPageState();
 }
 
 class _MedicationManagementPageState extends State<MedicationManagementPage> {
-  final List<Medication> _activeMeds = [
-    Medication(
-      id: 'm1',
-      patient: 'Alex Johnson',
-      name: 'Escitalopram',
-      dosage: '10 mg',
-      frequency: 'Once Daily',
-      status: 'Active',
-      refillProgress: 0.6,
-    ),
-    Medication(
-      id: 'm2',
-      patient: 'Sarah Williams',
-      name: 'Sertraline',
-      dosage: '50 mg',
-      frequency: 'Twice Daily',
-      status: 'Refill Due',
-      refillProgress: 0.95,
-    ),
-    Medication(
-      id: 'm3',
-      patient: 'Michael Chen',
-      name: 'Fluoxetine',
-      dosage: '20 mg',
-      frequency: 'Once Daily',
-      status: 'Active',
-      refillProgress: 0.2,
-    ),
-    Medication(
-      id: 'm4',
-      patient: 'Emma Davis',
-      name: 'Bupropion',
-      dosage: '150 mg',
-      frequency: 'Once Daily',
-      status: 'Monitoring',
-      refillProgress: 0.4,
-    ),
-  ];
-
+  bool _loading = true;
+  String? _error;
   String _searchQuery = '';
+  List<MedicationModel> _meds = const [];
+  List<LinkedPatient> _patients = const [];
 
-  List<Medication> get _filteredMeds {
-    if (_searchQuery.isEmpty) return _activeMeds;
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final results = await Future.wait([
+        MedicationService.instance.loadClinicianMeds(),
+        MedicationService.instance.loadLinkedPatients(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _meds = results[0] as List<MedicationModel>;
+        _patients = results[1] as List<LinkedPatient>;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  List<MedicationModel> get _filteredMeds {
+    final active = _meds.where((m) => m.isActive).toList();
+    if (_searchQuery.isEmpty) return active;
     final q = _searchQuery.toLowerCase();
-    return _activeMeds.where((m) {
-      return m.patient.toLowerCase().contains(q) || m.name.toLowerCase().contains(q);
+    return active.where((m) {
+      return m.patientName.toLowerCase().contains(q) ||
+          m.name.toLowerCase().contains(q);
     }).toList();
   }
 
-  void _deleteMedication(String id) {
-    setState(() {
-      _activeMeds.removeWhere((m) => m.id == id);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Prescription deactivated.'),
-        backgroundColor: CuramindColors.danger,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  Future<void> _deactivate(MedicationModel med) async {
+    try {
+      await MedicationService.instance.updateMedication(
+        medId: med.id,
+        isActive: false,
+      );
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Prescription deactivated.'),
+          backgroundColor: CuramindColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: CuramindColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
-  void _showPrescriptionModal([Medication? existingMed]) {
+  void _showPrescriptionModal([MedicationModel? existing]) {
+    if (_patients.isEmpty && existing == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'No linked patients yet. Create a join code and have a patient join first.',
+          ),
+          backgroundColor: CuramindColors.slate,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
         return _PrescriptionFormModal(
-          initialMed: existingMed,
-          onSave: (newMed) {
-            setState(() {
-              if (existingMed != null) {
-                final idx = _activeMeds.indexWhere((m) => m.id == existingMed.id);
-                if (idx != -1) _activeMeds[idx] = newMed;
-              } else {
-                _activeMeds.insert(0, newMed);
-              }
-            });
+          patients: _patients,
+          initialMed: existing,
+          onSaved: () async {
+            await _load();
+            if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(existingMed != null
-                    ? 'Prescription updated for ${newMed.patient}'
-                    : 'New prescription added for ${newMed.patient}'),
+                content: Text(
+                  existing != null
+                      ? 'Prescription updated'
+                      : 'Prescription sent to patient',
+                ),
                 backgroundColor: CuramindColors.sageDeep,
                 behavior: SnackBarBehavior.floating,
               ),
@@ -139,7 +137,11 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
 
   @override
   Widget build(BuildContext context) {
-    final content = SingleChildScrollView(
+    final content = RefreshIndicator(
+      onRefresh: _load,
+      color: CuramindColors.sageDeep,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -162,7 +164,7 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Manage ongoing patient medications and refill statuses.',
+                        'Prescribe to patients linked via your care group.',
                         style: GoogleFonts.outfit(
                           fontSize: 15,
                           color: CuramindColors.inkMuted,
@@ -173,13 +175,16 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
                 ),
                 CursorHoverRegion(
                   child: FilledButton.icon(
-                    onPressed: () => _showPrescriptionModal(),
+                    onPressed: _loading ? null : () => _showPrescriptionModal(),
                     icon: const Icon(Icons.add_rounded, size: 20),
-                    label: const Text('Buat Resep Baru'),
+                    label: const Text('New prescription'),
                     style: FilledButton.styleFrom(
                       backgroundColor: CuramindColors.coral,
                       foregroundColor: CuramindColors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 14,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -189,65 +194,73 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
               ],
             ),
             const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: CuramindColors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: CuramindColors.sageSoft),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.search_rounded, color: CuramindColors.slate),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            onChanged: (val) => setState(() => _searchQuery = val),
-                            decoration: InputDecoration(
-                              hintText: 'Search patient or medication...',
-                              hintStyle: GoogleFonts.outfit(
-                                color: CuramindColors.inkMuted,
-                              ),
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              filled: false,
-                            ),
-                          ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                color: CuramindColors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: CuramindColors.sageSoft),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.search_rounded, color: CuramindColors.slate),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      onChanged: (val) => setState(() => _searchQuery = val),
+                      decoration: InputDecoration(
+                        hintText: 'Search patient or medication...',
+                        hintStyle: GoogleFonts.outfit(
+                          color: CuramindColors.inkMuted,
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                CursorHoverRegion(
-                  child: FilledButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.filter_list_rounded, size: 20),
-                    label: const Text('Filter'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: CuramindColors.white,
-                      foregroundColor: CuramindColors.slate,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        side: const BorderSide(color: CuramindColors.sageSoft),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        filled: false,
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-            const SizedBox(height: 24),
-            if (_filteredMeds.isEmpty)
+            const SizedBox(height: 12),
+            Text(
+              '${_patients.length} linked patient${_patients.length == 1 ? '' : 's'}',
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                color: CuramindColors.inkMuted,
+              ),
+            ),
+            const SizedBox(height: 20),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 48),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_error != null)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.outfit(color: CuramindColors.inkMuted),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(onPressed: _load, child: const Text('Retry')),
+                  ],
+                ),
+              )
+            else if (_filteredMeds.isEmpty)
               Center(
                 child: Padding(
-                  padding: const EdgeInsets.all(32.0),
+                  padding: const EdgeInsets.all(32),
                   child: Text(
-                    'Belum ada data obat',
+                    _patients.isEmpty
+                        ? 'No linked patients yet. Share a join code first.'
+                        : 'No active prescriptions. Create one for a linked patient.',
+                    textAlign: TextAlign.center,
                     style: GoogleFonts.outfit(color: CuramindColors.slate),
                   ),
                 ),
@@ -257,21 +270,23 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _filteredMeds.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 16),
+                separatorBuilder: (_, _) => const SizedBox(height: 16),
                 itemBuilder: (context, index) {
+                  final med = _filteredMeds[index];
                   return _MedicationCard(
-                    data: _filteredMeds[index],
-                    onEdit: () => _showPrescriptionModal(_filteredMeds[index]),
-                    onDelete: () => _deleteMedication(_filteredMeds[index].id),
+                    data: med,
+                    onEdit: () => _showPrescriptionModal(med),
+                    onDelete: () => _deactivate(med),
                   );
                 },
               ),
           ],
         ),
+      ),
     );
 
     if (widget.embedded) return content;
-    
+
     return Scaffold(
       backgroundColor: CuramindColors.mist,
       body: SafeArea(child: content),
@@ -280,7 +295,7 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
 }
 
 class _MedicationCard extends StatelessWidget {
-  final Medication data;
+  final MedicationModel data;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -292,18 +307,13 @@ class _MedicationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isWarning = data.status == 'Refill Due';
-
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: CuramindColors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isWarning
-              ? CuramindColors.danger.withValues(alpha: 0.3)
-              : CuramindColors.sageSoft.withValues(alpha: 0.5),
-          width: isWarning ? 1.5 : 1.0,
+          color: CuramindColors.sageSoft.withValues(alpha: 0.5),
         ),
         boxShadow: [
           BoxShadow(
@@ -317,7 +327,6 @@ class _MedicationCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
@@ -325,7 +334,7 @@ class _MedicationCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      data.patient,
+                      data.patientName,
                       style: GoogleFonts.outfit(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
@@ -334,7 +343,7 @@ class _MedicationCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${data.name} • ${data.dosage}',
+                      data.name,
                       style: GoogleFonts.outfit(
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
@@ -343,7 +352,7 @@ class _MedicationCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      data.frequency,
+                      data.dosageAndFreq,
                       style: GoogleFonts.outfit(
                         fontSize: 14,
                         color: CuramindColors.inkMuted,
@@ -353,57 +362,22 @@ class _MedicationCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isWarning
-                      ? CuramindColors.danger.withValues(alpha: 0.1)
-                      : CuramindColors.sageSoft.withValues(alpha: 0.5),
+                  color: CuramindColors.sageSoft.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  data.status,
+                  'Active',
                   style: GoogleFonts.outfit(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: isWarning ? CuramindColors.danger : CuramindColors.sageDeep,
+                    color: CuramindColors.sageDeep,
                   ),
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Text(
-                'Supply Used',
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: CuramindColors.slate,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '${(data.refillProgress * 100).toInt()}%',
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: isWarning ? CuramindColors.danger : CuramindColors.ink,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: data.refillProgress,
-              minHeight: 8,
-              backgroundColor: CuramindColors.mistBlue,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                isWarning ? CuramindColors.danger : CuramindColors.sage,
-              ),
-            ),
           ),
           const SizedBox(height: 20),
           Row(
@@ -413,7 +387,7 @@ class _MedicationCard extends StatelessWidget {
                 child: TextButton.icon(
                   onPressed: onEdit,
                   icon: const Icon(Icons.edit_rounded, size: 18),
-                  label: const Text('Adjust Dose'),
+                  label: const Text('Edit'),
                 ),
               ),
               const SizedBox(width: 8),
@@ -424,7 +398,7 @@ class _MedicationCard extends StatelessWidget {
                     backgroundColor: CuramindColors.danger,
                   ),
                   icon: const Icon(Icons.block_rounded, size: 18),
-                  label: const Text('Nonaktifkan'),
+                  label: const Text('Deactivate'),
                 ),
               ),
             ],
@@ -436,60 +410,56 @@ class _MedicationCard extends StatelessWidget {
 }
 
 class _PrescriptionFormModal extends StatefulWidget {
-  final Medication? initialMed;
-  final ValueChanged<Medication> onSave;
+  final List<LinkedPatient> patients;
+  final MedicationModel? initialMed;
+  final Future<void> Function() onSaved;
 
-  const _PrescriptionFormModal({this.initialMed, required this.onSave});
+  const _PrescriptionFormModal({
+    required this.patients,
+    this.initialMed,
+    required this.onSaved,
+  });
 
   @override
-  State<_PrescriptionFormModal> createState() => _PrescriptionFormModalState();
+  State<_PrescriptionFormModal> createState() =>
+      _PrescriptionFormModalState();
 }
 
 class _PrescriptionFormModalState extends State<_PrescriptionFormModal> {
   final _formKey = GlobalKey<FormState>();
-
-  String _selectedPatient = 'Alex Johnson';
-  String _selectedFrequency = 'Once Daily';
-
-  final List<String> _patients = [
-    'Alex Johnson',
-    'Sarah Williams',
-    'Michael Chen',
-    'Emma Davis'
-  ];
-
-  final List<String> _frequencies = [
-    'Once Daily',
-    'Twice Daily',
-    'Three Times Daily',
-    'As Needed (PRN)'
-  ];
-
   final _medNameController = TextEditingController();
   final _dosageController = TextEditingController();
-  final _durationController = TextEditingController();
-  final _refillsController = TextEditingController();
   final _notesController = TextEditingController();
 
+  String? _selectedPatientId;
+  String _selectedFrequency = 'Once daily';
   bool _isSubmitting = false;
+
+  final _frequencies = const [
+    'Once daily',
+    'Twice daily',
+    'Three times daily',
+    'As needed (PRN)',
+  ];
 
   @override
   void initState() {
     super.initState();
-    if (widget.initialMed != null) {
-      final med = widget.initialMed!;
-      if (_patients.contains(med.patient)) {
-        _selectedPatient = med.patient;
+    final initial = widget.initialMed;
+    if (initial != null) {
+      _selectedPatientId = initial.patientId;
+      _medNameController.text = initial.name;
+      final parts = initial.dosageAndFreq.split('·');
+      _dosageController.text = parts.isNotEmpty ? parts.first.trim() : '';
+      if (parts.length > 1) {
+        final freq = parts.sublist(1).join('·').trim();
+        if (_frequencies.contains(freq)) _selectedFrequency = freq;
+        if (parts.length > 2) {
+          _notesController.text = parts.sublist(2).join('·').trim();
+        }
       }
-      if (_frequencies.contains(med.frequency)) {
-        _selectedFrequency = med.frequency;
-      }
-      _medNameController.text = med.name;
-      // parse dosage
-      _dosageController.text = med.dosage.replaceAll(RegExp(r'[^0-9.]'), '');
-      _durationController.text = med.durationDays.toString();
-      _refillsController.text = med.refillsRemaining.toString();
-      _notesController.text = med.notes;
+    } else if (widget.patients.isNotEmpty) {
+      _selectedPatientId = widget.patients.first.patientId;
     }
   }
 
@@ -497,38 +467,83 @@ class _PrescriptionFormModalState extends State<_PrescriptionFormModal> {
   void dispose() {
     _medNameController.dispose();
     _dosageController.dispose();
-    _durationController.dispose();
-    _refillsController.dispose();
     _notesController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    
-    setState(() => _isSubmitting = true);
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
-    
-    final newMed = Medication(
-      id: widget.initialMed?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      patient: _selectedPatient,
-      name: _medNameController.text,
-      dosage: '${_dosageController.text} mg',
-      frequency: _selectedFrequency,
-      status: widget.initialMed?.status ?? 'Active',
-      refillProgress: widget.initialMed?.refillProgress ?? 0.0,
-      durationDays: int.tryParse(_durationController.text) ?? 30,
-      refillsRemaining: int.tryParse(_refillsController.text) ?? 0,
-      notes: _notesController.text,
-    );
+    final patientId = _selectedPatientId;
+    if (patientId == null || patientId.isEmpty) return;
 
-    widget.onSave(newMed);
-    Navigator.of(context).pop();
+    LinkedPatient? patient;
+    for (final p in widget.patients) {
+      if (p.patientId == patientId) {
+        patient = p;
+        break;
+      }
+    }
+    final patientName =
+        patient?.patientName ?? widget.initialMed?.patientName ?? 'Patient';
+
+    final dosage = _dosageController.text.trim();
+    final notes = _notesController.text.trim();
+    final dosageAndFreq = [
+      dosage,
+      _selectedFrequency,
+      if (notes.isNotEmpty) notes,
+    ].join(' · ');
+
+    setState(() => _isSubmitting = true);
+    try {
+      if (widget.initialMed != null) {
+        await MedicationService.instance.updateMedication(
+          medId: widget.initialMed!.id,
+          name: _medNameController.text.trim(),
+          dosageAndFreq: dosageAndFreq,
+        );
+      } else {
+        await MedicationService.instance.prescribe(
+          patientId: patientId,
+          patientName: patientName,
+          name: _medNameController.text.trim(),
+          dosageAndFreq: dosageAndFreq,
+        );
+      }
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      await widget.onSaved();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: CuramindColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final patientItems = <DropdownMenuItem<String>>[
+      ...widget.patients.map(
+        (p) => DropdownMenuItem(
+          value: p.patientId,
+          child: Text(p.patientName),
+        ),
+      ),
+      if (widget.initialMed != null &&
+          !widget.patients.any((p) => p.patientId == widget.initialMed!.patientId))
+        DropdownMenuItem(
+          value: widget.initialMed!.patientId,
+          child: Text(widget.initialMed!.patientName),
+        ),
+    ];
+
     return Container(
       decoration: const BoxDecoration(
         color: CuramindColors.mist,
@@ -550,7 +565,9 @@ class _PrescriptionFormModalState extends State<_PrescriptionFormModal> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  widget.initialMed == null ? 'Buat Resep Baru' : 'Edit Resep',
+                  widget.initialMed == null
+                      ? 'New prescription'
+                      : 'Edit prescription',
                   style: GoogleFonts.fraunces(
                     fontSize: 24,
                     fontWeight: FontWeight.w600,
@@ -567,7 +584,7 @@ class _PrescriptionFormModalState extends State<_PrescriptionFormModal> {
             ),
             const SizedBox(height: 24),
             Text(
-              'Select Patient',
+              'Patient',
               style: GoogleFonts.outfit(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -582,30 +599,15 @@ class _PrescriptionFormModalState extends State<_PrescriptionFormModal> {
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: CuramindColors.mistBlue),
               ),
-              child: CursorHoverRegion(
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _selectedPatient,
-                    isExpanded: true,
-                    icon: const Icon(Icons.keyboard_arrow_down, color: CuramindColors.slate),
-                    dropdownColor: CuramindColors.white,
-                    style: GoogleFonts.outfit(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: CuramindColors.ink,
-                    ),
-                    items: _patients.map((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value,
-                        child: Text(value),
-                      );
-                    }).toList(),
-                    onChanged: (newValue) {
-                      if (newValue != null) {
-                        setState(() => _selectedPatient = newValue);
-                      }
-                    },
-                  ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedPatientId,
+                  isExpanded: true,
+                  hint: const Text('Select linked patient'),
+                  items: patientItems,
+                  onChanged: widget.initialMed != null
+                      ? null
+                      : (v) => setState(() => _selectedPatientId = v),
                 ),
               ),
             ),
@@ -613,10 +615,11 @@ class _PrescriptionFormModalState extends State<_PrescriptionFormModal> {
             TextFormField(
               controller: _medNameController,
               decoration: const InputDecoration(
-                labelText: 'Medication Name',
+                labelText: 'Medication name',
                 hintText: 'e.g., Escitalopram',
               ),
-              validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+              validator: (v) =>
+                  v == null || v.trim().isEmpty ? 'Required' : null,
             ),
             const SizedBox(height: 20),
             Row(
@@ -624,82 +627,45 @@ class _PrescriptionFormModalState extends State<_PrescriptionFormModal> {
                 Expanded(
                   child: TextFormField(
                     controller: _dosageController,
-                    keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: 'Dosage (mg)',
-                      hintText: 'e.g., 10',
+                      labelText: 'Dosage',
+                      hintText: 'e.g., 10 mg',
                     ),
-                    validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                    validator: (v) =>
+                        v == null || v.trim().isEmpty ? 'Required' : null,
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: CuramindColors.white,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: CuramindColors.mistBlue),
-                        ),
-                        child: CursorHoverRegion(
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _selectedFrequency,
-                              isExpanded: true,
-                              icon: const Icon(Icons.keyboard_arrow_down, color: CuramindColors.slate),
-                              dropdownColor: CuramindColors.white,
-                              style: GoogleFonts.outfit(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                color: CuramindColors.ink,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: CuramindColors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: CuramindColors.mistBlue),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _selectedFrequency,
+                        isExpanded: true,
+                        items: _frequencies
+                            .map(
+                              (f) => DropdownMenuItem(
+                                value: f,
+                                child: Text(f),
                               ),
-                              items: _frequencies.map((String value) {
-                                return DropdownMenuItem<String>(
-                                  value: value,
-                                  child: Text(value),
-                                );
-                              }).toList(),
-                              onChanged: (newValue) {
-                                if (newValue != null) {
-                                  setState(() => _selectedFrequency = newValue);
-                                }
-                              },
-                            ),
-                          ),
-                        ),
+                            )
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) {
+                            setState(() => _selectedFrequency = v);
+                          }
+                        },
                       ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _durationController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Duration (days)',
-                      hintText: '30',
                     ),
-                    validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: TextFormField(
-                    controller: _refillsController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Refills',
-                      hintText: '0',
-                    ),
-                    validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                   ),
                 ),
               ],
@@ -709,7 +675,7 @@ class _PrescriptionFormModalState extends State<_PrescriptionFormModal> {
               controller: _notesController,
               maxLines: 2,
               decoration: const InputDecoration(
-                labelText: 'Clinical Notes & Instructions',
+                labelText: 'Instructions (optional)',
                 hintText: 'Take with food...',
               ),
             ),
@@ -729,7 +695,11 @@ class _PrescriptionFormModalState extends State<_PrescriptionFormModal> {
                           color: CuramindColors.white,
                         ),
                       )
-                    : Text(widget.initialMed == null ? 'Submit Prescription' : 'Save Changes'),
+                    : Text(
+                        widget.initialMed == null
+                            ? 'Submit prescription'
+                            : 'Save changes',
+                      ),
               ),
             ),
           ],

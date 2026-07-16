@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../services/diary_service.dart';
+import '../../services/medication_service.dart';
 import '../../theme/curamind_theme.dart';
 
 class PersonalDashboardPage extends StatefulWidget {
@@ -19,21 +21,29 @@ class PersonalDashboardPage extends StatefulWidget {
 
 class _PersonalDashboardPageState extends State<PersonalDashboardPage> {
   int _rangeDays = 7;
+  bool _loading = true;
+  String? _error;
+  List<_DayPoint> _allDays = const [];
 
-  static final List<_DayPoint> _allDays = _buildDemoSeries();
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   List<_DayPoint> get _visible {
+    if (_allDays.length <= _rangeDays) return _allDays;
     return _allDays.sublist(_allDays.length - _rangeDays);
   }
 
   double get _avgMood {
-    final pts = _visible;
+    final pts = _visible.where((p) => p.hasMood).toList();
     if (pts.isEmpty) return 0;
     return pts.map((p) => p.mood).reduce((a, b) => a + b) / pts.length;
   }
 
   double get _avgAdherence {
-    final pts = _visible;
+    final pts = _visible.where((p) => p.hasAdherence).toList();
     if (pts.isEmpty) return 0;
     return pts.map((p) => p.adherence).reduce((a, b) => a + b) / pts.length;
   }
@@ -41,13 +51,25 @@ class _PersonalDashboardPageState extends State<PersonalDashboardPage> {
   int get _diaryCount => _visible.where((p) => p.hasDiary).length;
 
   double get _peakUrge {
-    if (_visible.isEmpty) return 0;
-    return _visible.map((p) => p.urge).reduce(math.max);
+    final pts = _visible.where((p) => p.hasMood).toList();
+    if (pts.isEmpty) return 0;
+    return pts.map((p) => p.urge).reduce(math.max);
   }
 
   String get _insight {
+    final moodPts = _visible.where((p) => p.hasMood).length;
+    final adhPts = _visible.where((p) => p.hasAdherence).length;
+    if (moodPts == 0 && adhPts == 0) {
+      return 'No diary or medication logs in this window yet. Log a diary entry and check off meds to see trends.';
+    }
     final mood = _avgMood;
     final adh = _avgAdherence;
+    if (adhPts == 0) {
+      return 'Mood data is building. Check off today’s meds so adherence can appear beside mood.';
+    }
+    if (moodPts == 0) {
+      return 'Medication logs are in. Add diary entries to compare mood with adherence.';
+    }
     if (adh >= 0.85 && mood >= 6) {
       return 'Mood and adherence are both steady this period — keep the current routine.';
     }
@@ -60,120 +82,259 @@ class _PersonalDashboardPageState extends State<PersonalDashboardPage> {
     if (adh < 0.7 && mood >= 6) {
       return 'Mood held up even with some missed doses. Still worth tightening the schedule.';
     }
-    return 'Mood and adherence move together across the window — tap days on the chart for detail.';
+    return 'Mood and adherence across your real logs for this window.';
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      List<DiaryEntryModel> diary = const [];
+      MedPeriodStats medStats = const MedPeriodStats(
+        days: 30,
+        activeMeds: 0,
+        taken: 0,
+        missed: 0,
+        logged: 0,
+        adherencePct: 0,
+      );
+
+      Object? firstError;
+      try {
+        diary = await DiaryService.instance.loadMyEntries();
+      } catch (e) {
+        firstError = e;
+      }
+      try {
+        medStats = await MedicationService.instance.loadMyStats(days: 30);
+      } catch (e) {
+        firstError ??= e;
+      }
+
+      if (diary.isEmpty &&
+          medStats.byDay.isEmpty &&
+          medStats.activeMeds == 0 &&
+          firstError != null) {
+        throw firstError;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _allDays = _buildSeries(diary: diary, medStats: medStats);
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  static String _dayKey(DateTime d) {
+    final u = d.toUtc();
+    final m = u.month.toString().padLeft(2, '0');
+    final day = u.day.toString().padLeft(2, '0');
+    return '${u.year}-$m-$day';
+  }
+
+  static DateTime _dateFromKey(String key) {
+    final parts = key.split('-');
+    if (parts.length != 3) return DateTime.now().toUtc();
+    return DateTime.utc(
+      int.tryParse(parts[0]) ?? 1970,
+      int.tryParse(parts[1]) ?? 1,
+      int.tryParse(parts[2]) ?? 1,
+    );
+  }
+
+  static List<_DayPoint> _buildSeries({
+    required List<DiaryEntryModel> diary,
+    required MedPeriodStats medStats,
+  }) {
+    final now = DateTime.now().toUtc();
+    final today = DateTime.utc(now.year, now.month, now.day);
+    final medByDay = {
+      for (final d in medStats.byDay) d.dayKey: d,
+    };
+    final active = medStats.activeMeds;
+
+    final moodByDay = <String, List<double>>{};
+    final urgeByDay = <String, List<double>>{};
+    final diaryDays = <String>{};
+
+    for (final e in diary) {
+      final key = _dayKey(e.createdAt);
+      diaryDays.add(key);
+      if (e.kind == DiaryEntryKind.dbtCard && e.mood > 0) {
+        moodByDay.putIfAbsent(key, () => []).add(e.mood.toDouble());
+        final urge = math.max(e.urgeNssi, e.urgeSubstance).toDouble();
+        urgeByDay.putIfAbsent(key, () => []).add(urge);
+      }
+    }
+
+    return List.generate(30, (i) {
+      final day = today.subtract(Duration(days: 29 - i));
+      final key = _dayKey(day);
+      final moods = moodByDay[key];
+      final urges = urgeByDay[key];
+      final med = medByDay[key];
+      final logged = (med?.taken ?? 0) + (med?.missed ?? 0);
+
+      double adherence = 0;
+      var hasAdherence = false;
+      if (active > 0) {
+        hasAdherence = true;
+        adherence = (med?.taken ?? 0) / active;
+      } else if (logged > 0) {
+        hasAdherence = true;
+        adherence = (med?.taken ?? 0) / logged;
+      }
+
+      final hasMood = moods != null && moods.isNotEmpty;
+      final mood = hasMood
+          ? moods.reduce((a, b) => a + b) / moods.length
+          : 0.0;
+      final urge = (urges != null && urges.isNotEmpty)
+          ? urges.reduce(math.max)
+          : 0.0;
+
+      return _DayPoint(
+        date: _dateFromKey(key).toLocal(),
+        mood: mood,
+        adherence: adherence.clamp(0.0, 1.0),
+        urge: urge,
+        hasDiary: diaryDays.contains(key),
+        hasMood: hasMood,
+        hasAdherence: hasAdherence,
+      );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final content = SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (!widget.embedded) ...[
+    final content = RefreshIndicator(
+      onRefresh: _load,
+      color: CuramindColors.sageDeep,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!widget.embedded) ...[
+                  Text(
+                    'Dashboard',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.fraunces(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w600,
+                      color: CuramindColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                ],
                 Text(
-                  'Dashboard',
+                  'Mood scores and medication adherence from your diary and med logs.',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.fraunces(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w600,
-                    color: CuramindColors.ink,
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    height: 1.4,
+                    color: CuramindColors.inkMuted,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 16),
+                if (_loading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 48),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_error != null)
+                  _ErrorBox(message: _error!, onRetry: _load)
+                else ...[
+                  _RangeChips(
+                    selected: _rangeDays,
+                    onSelected: (d) => setState(() => _rangeDays = d),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _StatTile(
+                          label: 'Avg mood',
+                          value: _visible.any((p) => p.hasMood)
+                              ? _avgMood.toStringAsFixed(1)
+                              : '—',
+                          hint: 'of 10',
+                          color: CuramindColors.sageDeep,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _StatTile(
+                          label: 'Adherence',
+                          value: _visible.any((p) => p.hasAdherence)
+                              ? '${(_avgAdherence * 100).round()}%'
+                              : '—',
+                          hint: 'of doses',
+                          color: CuramindColors.ocean,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _StatTile(
+                          label: 'Diary days',
+                          value: '$_diaryCount',
+                          hint: 'of $_rangeDays',
+                          color: CuramindColors.slate,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _StatTile(
+                          label: 'Peak urge',
+                          value: _visible.any((p) => p.hasMood)
+                              ? _peakUrge.toStringAsFixed(0)
+                              : '—',
+                          hint: 'of 10',
+                          color: CuramindColors.danger,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  _DualChartCard(points: _visible),
+                  const SizedBox(height: 12),
+                  _InsightCard(text: _insight),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Recent days',
+                    style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: CuramindColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  ..._visible.reversed.take(5).map(
+                        (p) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: _DayRow(point: p),
+                        ),
+                      ),
+                ],
               ],
-              Text(
-                'Mood scores and medication adherence over time.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  height: 1.4,
-                  color: CuramindColors.inkMuted,
-                ),
-              ),
-              const SizedBox(height: 16),
-              _RangeChips(
-                selected: _rangeDays,
-                onSelected: (d) => setState(() => _rangeDays = d),
-              ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: _StatTile(
-                      label: 'Avg mood',
-                      value: _avgMood.toStringAsFixed(1),
-                      hint: 'of 10',
-                      color: CuramindColors.sageDeep,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _StatTile(
-                      label: 'Adherence',
-                      value: '${(_avgAdherence * 100).round()}%',
-                      hint: 'of doses',
-                      color: CuramindColors.ocean,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _StatTile(
-                      label: 'Diary days',
-                      value: '$_diaryCount',
-                      hint: 'of $_rangeDays',
-                      color: CuramindColors.slate,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _StatTile(
-                      label: 'Peak urge',
-                      value: _peakUrge.toStringAsFixed(0),
-                      hint: 'of 10',
-                      color: CuramindColors.danger,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              _DualChartCard(points: _visible),
-              const SizedBox(height: 12),
-              _InsightCard(text: _insight),
-              const SizedBox(height: 18),
-              Text(
-                'Recent days',
-                style: GoogleFonts.outfit(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: CuramindColors.ink,
-                ),
-              ),
-              const SizedBox(height: 10),
-              ..._visible.reversed.take(5).map(
-                    (p) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: _DayRow(point: p),
-                    ),
-                  ),
-              const SizedBox(height: 8),
-              Text(
-                'Demo data for now. Live diary and med logs will feed this chart later.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  height: 1.4,
-                  color: CuramindColors.inkMuted,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -190,34 +351,37 @@ class _PersonalDashboardPageState extends State<PersonalDashboardPage> {
   }
 }
 
-List<_DayPoint> _buildDemoSeries() {
-  final now = DateTime.now();
-  const moods = [
-    5.0, 6.0, 4.5, 5.5, 7.0, 6.5, 5.0, 4.0, 3.5, 5.0,
-    6.0, 7.5, 7.0, 6.0, 5.5, 6.5, 7.0, 8.0, 6.5, 5.0,
-    4.5, 5.5, 6.0, 6.5, 7.0, 6.0, 5.5, 6.0, 7.0, 6.5,
-  ];
-  const adherence = [
-    1.0, 1.0, 0.75, 1.0, 1.0, 0.5, 1.0, 0.75, 0.5, 1.0,
-    1.0, 1.0, 1.0, 0.75, 1.0, 1.0, 1.0, 1.0, 0.75, 0.5,
-    0.75, 1.0, 1.0, 1.0, 1.0, 0.75, 1.0, 1.0, 1.0, 1.0,
-  ];
-  const urges = [
-    4.0, 3.0, 6.0, 4.0, 2.0, 3.0, 5.0, 7.0, 8.0, 4.0,
-    3.0, 2.0, 2.0, 3.0, 4.0, 2.0, 2.0, 1.0, 3.0, 5.0,
-    6.0, 4.0, 3.0, 2.0, 2.0, 3.0, 3.0, 2.0, 2.0, 2.0,
-  ];
+class _ErrorBox extends StatelessWidget {
+  const _ErrorBox({required this.message, required this.onRetry});
 
-  return List.generate(30, (i) {
-    final day = now.subtract(Duration(days: 29 - i));
-    return _DayPoint(
-      date: DateTime(day.year, day.month, day.day),
-      mood: moods[i],
-      adherence: adherence[i],
-      urge: urges[i],
-      hasDiary: i % 3 != 1,
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: CuramindColors.white.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: CuramindColors.mistBlue),
+      ),
+      child: Column(
+        children: [
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(
+              fontSize: 14,
+              color: CuramindColors.inkMuted,
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
     );
-  });
+  }
 }
 
 class _DayPoint {
@@ -227,6 +391,8 @@ class _DayPoint {
     required this.adherence,
     required this.urge,
     required this.hasDiary,
+    required this.hasMood,
+    required this.hasAdherence,
   });
 
   final DateTime date;
@@ -234,6 +400,8 @@ class _DayPoint {
   final double adherence;
   final double urge;
   final bool hasDiary;
+  final bool hasMood;
+  final bool hasAdherence;
 }
 
 class _RangeChips extends StatelessWidget {
@@ -486,13 +654,13 @@ class _DualAxisPainter extends CustomPainter {
     final n = points.length;
     final stepX = n == 1 ? 0.0 : chartW / (n - 1);
 
-    // Adherence as soft bars
     final barPaint = Paint()
       ..color = CuramindColors.slate.withValues(alpha: 0.28)
       ..style = PaintingStyle.fill;
     final barW = (stepX * 0.45).clamp(4.0, 14.0);
 
     for (var i = 0; i < n; i++) {
+      if (!points[i].hasAdherence) continue;
       final x = leftPad + i * stepX;
       final h = points[i].adherence * chartH;
       canvas.drawRRect(
@@ -504,7 +672,6 @@ class _DualAxisPainter extends CustomPainter {
       );
     }
 
-    // Mood line
     final linePaint = Paint()
       ..color = CuramindColors.sageDeep
       ..strokeWidth = 2.4
@@ -513,11 +680,17 @@ class _DualAxisPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round;
 
     final path = Path();
+    var started = false;
     for (var i = 0; i < n; i++) {
+      if (!points[i].hasMood) {
+        started = false;
+        continue;
+      }
       final x = leftPad + i * stepX;
       final y = origin.dy - (points[i].mood / 10) * chartH;
-      if (i == 0) {
+      if (!started) {
         path.moveTo(x, y);
+        started = true;
       } else {
         path.lineTo(x, y);
       }
@@ -530,16 +703,14 @@ class _DualAxisPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     for (var i = 0; i < n; i++) {
+      if (!points[i].hasMood) continue;
       final x = leftPad + i * stepX;
       final y = origin.dy - (points[i].mood / 10) * chartH;
       canvas.drawCircle(Offset(x, y), 4.5, ringPaint);
       canvas.drawCircle(Offset(x, y), 3, dotPaint);
     }
 
-    // X labels: first, mid, last
-    final labelIdx = n <= 3
-        ? List.generate(n, (i) => i)
-        : [0, n ~/ 2, n - 1];
+    final labelIdx = n <= 3 ? List.generate(n, (i) => i) : [0, n ~/ 2, n - 1];
     for (final i in labelIdx.toSet()) {
       final x = leftPad + i * stepX;
       final d = points[i].date;
@@ -660,7 +831,9 @@ class _DayRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Mood ${point.mood.toStringAsFixed(1)} · Urge ${point.urge.toStringAsFixed(0)}',
+                  point.hasMood
+                      ? 'Mood ${point.mood.toStringAsFixed(1)} · Urge ${point.urge.toStringAsFixed(0)}'
+                      : 'No mood log',
                   style: GoogleFonts.outfit(
                     fontSize: 13,
                     color: CuramindColors.ink,
@@ -678,13 +851,17 @@ class _DayRow extends StatelessWidget {
             ),
           ),
           Text(
-            '${(point.adherence * 100).round()}%',
+            point.hasAdherence
+                ? '${(point.adherence * 100).round()}%'
+                : '—',
             style: GoogleFonts.outfit(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: point.adherence < 0.75
-                  ? CuramindColors.danger
-                  : CuramindColors.sageDeep,
+              color: !point.hasAdherence
+                  ? CuramindColors.inkMuted
+                  : point.adherence < 0.75
+                      ? CuramindColors.danger
+                      : CuramindColors.sageDeep,
             ),
           ),
         ],

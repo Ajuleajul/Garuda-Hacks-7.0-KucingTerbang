@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../animated_cursor.dart';
 import '../theme/curamind_theme.dart';
+import 'profile_avatar.dart';
 
 class NavDestination {
   const NavDestination({
@@ -14,7 +15,6 @@ class NavDestination {
   final IconData icon;
 }
 
-/// Breakpoint: phone / narrow layout uses bottom icon nav.
 bool curamindUseBottomNav(BuildContext context) {
   return MediaQuery.sizeOf(context).width < 720;
 }
@@ -27,6 +27,8 @@ class CuramindAppHeader extends StatelessWidget implements PreferredSizeWidget {
     required this.onDestinationSelected,
     this.userLabel,
     this.showNav = true,
+    this.profileIndex,
+    this.onProfileTap,
   });
 
   final List<NavDestination> destinations;
@@ -34,6 +36,8 @@ class CuramindAppHeader extends StatelessWidget implements PreferredSizeWidget {
   final ValueChanged<int> onDestinationSelected;
   final String? userLabel;
   final bool showNav;
+  final int? profileIndex;
+  final VoidCallback? onProfileTap;
 
   @override
   Size get preferredSize => const Size.fromHeight(64);
@@ -111,6 +115,14 @@ class CuramindAppHeader extends StatelessWidget implements PreferredSizeWidget {
                 ),
               ] else
                 const Spacer(),
+              const SizedBox(width: 10),
+              ProfileAvatar(
+                size: 36,
+                onTap: onProfileTap ??
+                    (profileIndex != null
+                        ? () => onDestinationSelected(profileIndex!)
+                        : null),
+              ),
             ],
           ),
         ),
@@ -119,7 +131,6 @@ class CuramindAppHeader extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-/// Icon-only bottom navigation for phone layouts.
 class CuramindBottomNav extends StatelessWidget {
   const CuramindBottomNav({
     super.key,
@@ -156,30 +167,30 @@ class CuramindBottomNav extends StatelessWidget {
                     child: InkWell(
                       onTap: () => onDestinationSelected(i),
                       child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          dest.icon,
-                          size: 24,
-                          color: selected
-                              ? CuramindColors.sageDeep
-                              : CuramindColors.inkMuted,
-                        ),
-                        const SizedBox(height: 4),
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
-                          width: selected ? 16 : 0,
-                          height: 3,
-                          decoration: BoxDecoration(
-                            color: CuramindColors.sageDeep,
-                            borderRadius: BorderRadius.circular(99),
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            dest.icon,
+                            size: 24,
+                            color: selected
+                                ? CuramindColors.sageDeep
+                                : CuramindColors.inkMuted,
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 4),
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            width: selected ? 16 : 0,
+                            height: 3,
+                            decoration: BoxDecoration(
+                              color: CuramindColors.sageDeep,
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              );
+                );
               }),
             ),
           ),
@@ -215,30 +226,30 @@ class _NavChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: selected
-                    ? CuramindColors.white
-                    : CuramindColors.inkMuted,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
                   color: selected
                       ? CuramindColors.white
                       : CuramindColors.inkMuted,
                 ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: selected
+                        ? CuramindColors.white
+                        : CuramindColors.inkMuted,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
         ),
       ),
     );

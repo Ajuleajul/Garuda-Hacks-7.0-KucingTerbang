@@ -83,6 +83,7 @@ class _PatientShellState extends State<PatientShell> {
         onDestinationSelected: _go,
         userLabel: 'Patient',
         showNav: !mobile,
+        profileIndex: PatientShell.destinations.length - 1,
       ),
       body: IndexedStack(index: _index, children: _pages),
       bottomNavigationBar: mobile

@@ -7,6 +7,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { diaryRouter } from "./routes/diary";
 import { linkRouter } from './routes/link';
+import { medsRouter } from "./routes/meds";
 import { startCronJobs } from './jobs/dailyCheck';
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
@@ -26,6 +27,7 @@ app.get("/health", (_req, res) => {
 });
 app.use("/api/diary", diaryRouter);
 app.use('/api/link', linkRouter);
+app.use("/api/meds", medsRouter);
 
 startCronJobs();
 

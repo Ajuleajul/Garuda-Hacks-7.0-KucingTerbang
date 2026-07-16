@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../services/diary_service.dart';
+import '../../services/link_service.dart';
+import '../../services/medication_service.dart';
 import '../../theme/curamind_theme.dart';
 import 'DistressCrisisSOSPage.dart';
 
-/// Patient shell indices:
-/// 0 Home · 1 Diary · 2 Meds · 3 Distress · 4 Dashboard · 5 Link · 6 Profile
-class PatientHomePage extends StatelessWidget {
+class PatientHomePage extends StatefulWidget {
   const PatientHomePage({
     super.key,
     required this.displayName,
@@ -23,16 +24,23 @@ class PatientHomePage extends StatelessWidget {
   static const linkIndex = 5;
   static const profileIndex = 6;
 
-  static const _diaryDoneToday = false;
-  static const _medsDue = 3;
-  static const _medsTaken = 1;
-  static const _avgMood7d = 6.2;
-  static const _adherence7d = 0.86;
-  static const _clinicianLinked = true;
-  static const _clinicianName = 'Dr. Maya Santoso';
+  @override
+  State<PatientHomePage> createState() => _PatientHomePageState();
+}
+
+class _PatientHomePageState extends State<PatientHomePage> {
+  bool _loading = true;
+  bool _diaryDoneToday = false;
+  int _medsDue = 0;
+  int _medsTaken = 0;
+  int _medsTotal = 0;
+  double? _avgMood7d;
+  int? _adherence7dPct;
+  bool _clinicianLinked = false;
+  String _clinicianName = '';
 
   String get _firstName {
-    final parts = displayName.trim().split(RegExp(r'\s+'));
+    final parts = widget.displayName.trim().split(RegExp(r'\s+'));
     return parts.isEmpty ? 'there' : parts.first;
   }
 
@@ -54,170 +62,298 @@ class PatientHomePage extends StatelessWidget {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  static String _utcDayKey(DateTime d) {
+    final u = d.toUtc();
+    final m = u.month.toString().padLeft(2, '0');
+    final day = u.day.toString().padLeft(2, '0');
+    return '${u.year}-$m-$day';
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+
+    var diaryDone = false;
+    double? avgMood;
+    var medsDue = 0;
+    var medsTaken = 0;
+    var medsTotal = 0;
+    int? adherencePct;
+    var linked = false;
+    var clinicianName = '';
+
+    try {
+      final diary = await DiaryService.instance.loadMyEntries();
+      final todayKey = _utcDayKey(DateTime.now());
+      diaryDone = diary.any((e) => _utcDayKey(e.createdAt) == todayKey);
+
+      final since = DateTime.now().toUtc().subtract(const Duration(days: 6));
+      final sinceDay = DateTime.utc(since.year, since.month, since.day);
+      final moods = diary
+          .where(
+            (e) =>
+                e.kind == DiaryEntryKind.dbtCard &&
+                e.mood > 0 &&
+                e.createdAt.toUtc().isAfter(
+                      sinceDay.subtract(const Duration(seconds: 1)),
+                    ),
+          )
+          .map((e) => e.mood.toDouble())
+          .toList();
+      if (moods.isNotEmpty) {
+        avgMood = moods.reduce((a, b) => a + b) / moods.length;
+      }
+    } catch (_) {}
+
+    try {
+      final meds = await MedicationService.instance.loadMyMeds();
+      medsDue = meds.today.due;
+      medsTaken = meds.today.taken;
+      medsTotal = meds.today.active;
+      if (meds.period.logged > 0) {
+        adherencePct = meds.period.adherencePct;
+      } else if (meds.today.active == 0) {
+        adherencePct = null;
+      } else {
+        adherencePct = 0;
+      }
+    } catch (_) {}
+
+    try {
+      final link = await LinkService.instance.getMyPatientLink();
+      if (link != null) {
+        linked = true;
+        clinicianName = link.clinicianName.trim().isEmpty
+            ? 'Clinician'
+            : link.clinicianName.trim();
+      }
+    } catch (_) {}
+
+    if (!mounted) return;
+    setState(() {
+      _diaryDoneToday = diaryDone;
+      _avgMood7d = avgMood;
+      _medsDue = medsDue;
+      _medsTaken = medsTaken;
+      _medsTotal = medsTotal;
+      _adherence7dPct = adherencePct;
+      _clinicianLinked = linked;
+      _clinicianName = clinicianName;
+      _loading = false;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final medsLabel = _medsTotal == 0
+        ? '—'
+        : '$_medsTaken/$_medsTotal';
+    final moodLabel =
+        _avgMood7d == null ? '—' : _avgMood7d!.toStringAsFixed(1);
+    final adhereLabel =
+        _adherence7dPct == null ? '—' : '$_adherence7dPct%';
+
     return ColoredBox(
       color: CuramindColors.mist,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _GreetingHeader(
-                  greeting: _greeting,
-                  name: _firstName,
-                  dateLabel: _dateLabel,
-                ),
-                const SizedBox(height: 14),
-                _SosEntryCard(
-                  onOpen: () => DistressCrisisSOSPage.open(context),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _GlanceChip(
-                        label: 'Diary',
-                        value: _diaryDoneToday ? 'Done' : 'Pending',
-                        onTap: () => onNavigate(diaryIndex),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _GlanceChip(
-                        label: 'Meds',
-                        value: '$_medsTaken/${_medsTaken + _medsDue}',
-                        onTap: () => onNavigate(medsIndex),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _GlanceChip(
-                        label: '7d mood',
-                        value: _avgMood7d.toStringAsFixed(1),
-                        onTap: () => onNavigate(dashboardIndex),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _GlanceChip(
-                        label: 'Adhere',
-                        value: '${(_adherence7d * 100).round()}%',
-                        onTap: () => onNavigate(dashboardIndex),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                _PrimaryCta(
-                  title: _diaryDoneToday
-                      ? 'Review today’s diary'
-                      : 'Log today’s diary',
-                  subtitle: 'Mood, triggers, urges, and skills — about 2 minutes.',
-                  icon: Icons.edit_note_outlined,
-                  onTap: () => onNavigate(diaryIndex),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _SecondaryCta(
-                        title: 'Meds',
-                        subtitle: _medsDue > 0 ? '$_medsDue due' : 'All logged',
-                        icon: Icons.medication_outlined,
-                        onTap: () => onNavigate(medsIndex),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _SecondaryCta(
-                        title: 'Distress kit',
-                        subtitle: 'Breathe · ground · plan',
-                        icon: Icons.self_improvement_outlined,
-                        onTap: () => onNavigate(distressIndex),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  'Quick actions',
-                  style: GoogleFonts.outfit(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: CuramindColors.ink,
+      child: RefreshIndicator(
+        onRefresh: _load,
+        color: CuramindColors.sageDeep,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _GreetingHeader(
+                    greeting: _greeting,
+                    name: _firstName,
+                    dateLabel: _dateLabel,
                   ),
-                ),
-                const SizedBox(height: 8),
-                _QuickGrid(
-                  items: [
-                    _QuickItem(
-                      label: 'Dashboard',
-                      hint: 'Mood × meds',
-                      icon: Icons.show_chart_outlined,
-                      onTap: () => onNavigate(dashboardIndex),
-                    ),
-                    _QuickItem(
-                      label: 'Clinician',
-                      hint: _clinicianLinked ? _clinicianName : 'Link code',
-                      icon: Icons.link_outlined,
-                      onTap: () => onNavigate(linkIndex),
-                    ),
-                    _QuickItem(
-                      label: 'Breathing',
-                      hint: 'Calm skills',
-                      icon: Icons.air_outlined,
-                      onTap: () => onNavigate(distressIndex),
-                    ),
-                    _QuickItem(
-                      label: 'Profile',
-                      hint: 'Account',
-                      icon: Icons.person_outline_rounded,
-                      onTap: () => onNavigate(profileIndex),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Material(
-                  color: CuramindColors.sageSoft.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(14),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: () => onNavigate(linkIndex),
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _clinicianLinked
-                                ? Icons.verified_outlined
-                                : Icons.link_off_outlined,
-                            color: CuramindColors.sageDeep,
+                  const SizedBox(height: 14),
+                  _SosEntryCard(
+                    onOpen: () => DistressCrisisSOSPage.open(context),
+                  ),
+                  const SizedBox(height: 14),
+                  if (_loading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Center(
+                        child: SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2.4),
+                        ),
+                      ),
+                    )
+                  else
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _GlanceChip(
+                            label: 'Diary',
+                            value: _diaryDoneToday ? 'Done' : 'Pending',
+                            onTap: () =>
+                                widget.onNavigate(PatientHomePage.diaryIndex),
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _GlanceChip(
+                            label: 'Meds',
+                            value: medsLabel,
+                            onTap: () =>
+                                widget.onNavigate(PatientHomePage.medsIndex),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _GlanceChip(
+                            label: '7d mood',
+                            value: moodLabel,
+                            onTap: () => widget
+                                .onNavigate(PatientHomePage.dashboardIndex),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _GlanceChip(
+                            label: 'Adhere',
+                            value: adhereLabel,
+                            onTap: () => widget
+                                .onNavigate(PatientHomePage.dashboardIndex),
+                          ),
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 14),
+                  _PrimaryCta(
+                    title: _diaryDoneToday
+                        ? 'Review today’s diary'
+                        : 'Log today’s diary',
+                    subtitle:
+                        'Mood, triggers, urges, and skills — about 2 minutes.',
+                    icon: Icons.edit_note_outlined,
+                    onTap: () =>
+                        widget.onNavigate(PatientHomePage.diaryIndex),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _SecondaryCta(
+                          title: 'Meds',
+                          subtitle: _medsTotal == 0
+                              ? 'No prescriptions'
+                              : _medsDue > 0
+                                  ? '$_medsDue due'
+                                  : 'All logged',
+                          icon: Icons.medication_outlined,
+                          onTap: () =>
+                              widget.onNavigate(PatientHomePage.medsIndex),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _SecondaryCta(
+                          title: 'Distress kit',
+                          subtitle: 'Breathe · ground · plan',
+                          icon: Icons.self_improvement_outlined,
+                          onTap: () => widget
+                              .onNavigate(PatientHomePage.distressIndex),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Quick actions',
+                    style: GoogleFonts.outfit(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: CuramindColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _QuickGrid(
+                    items: [
+                      _QuickItem(
+                        label: 'Dashboard',
+                        hint: 'Mood × meds',
+                        icon: Icons.show_chart_outlined,
+                        onTap: () => widget
+                            .onNavigate(PatientHomePage.dashboardIndex),
+                      ),
+                      _QuickItem(
+                        label: 'Clinician',
+                        hint: _clinicianLinked ? _clinicianName : 'Link code',
+                        icon: Icons.link_outlined,
+                        onTap: () =>
+                            widget.onNavigate(PatientHomePage.linkIndex),
+                      ),
+                      _QuickItem(
+                        label: 'Breathing',
+                        hint: 'Calm skills',
+                        icon: Icons.air_outlined,
+                        onTap: () => widget
+                            .onNavigate(PatientHomePage.distressIndex),
+                      ),
+                      _QuickItem(
+                        label: 'Profile',
+                        hint: 'Account',
+                        icon: Icons.person_outline_rounded,
+                        onTap: () =>
+                            widget.onNavigate(PatientHomePage.profileIndex),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Material(
+                    color: CuramindColors.sageSoft.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(14),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () =>
+                          widget.onNavigate(PatientHomePage.linkIndex),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(
+                          children: [
+                            Icon(
                               _clinicianLinked
-                                  ? 'Linked with $_clinicianName'
-                                  : 'Not linked to a clinician yet',
-                              style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                color: CuramindColors.ink,
+                                  ? Icons.verified_outlined
+                                  : Icons.link_off_outlined,
+                              color: CuramindColors.sageDeep,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _clinicianLinked
+                                    ? 'Linked with $_clinicianName'
+                                    : 'Not linked to a clinician yet',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  color: CuramindColors.ink,
+                                ),
                               ),
                             ),
-                          ),
-                          const Icon(
-                            Icons.chevron_right_rounded,
-                            color: CuramindColors.inkMuted,
-                          ),
-                        ],
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              color: CuramindColors.inkMuted,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -226,7 +362,6 @@ class PatientHomePage extends StatelessWidget {
   }
 }
 
-/// Large SOS entry — muted red, never auto-dials.
 class _SosEntryCard extends StatelessWidget {
   const _SosEntryCard({required this.onOpen});
 
