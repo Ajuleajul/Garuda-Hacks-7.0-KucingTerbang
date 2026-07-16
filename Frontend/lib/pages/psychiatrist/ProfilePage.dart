@@ -10,10 +10,14 @@ class ProfilePage extends StatefulWidget {
     super.key,
     this.name = 'Dr. Ada Lim',
     this.role = 'Psychiatrist',
+    this.embedded = false,
+    this.onSignedOut,
   });
 
   final String name;
   final String role;
+  final bool embedded;
+  final VoidCallback? onSignedOut;
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -76,6 +80,10 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _logOut() async {
     await AuthService.instance.logout();
     if (!mounted) return;
+    if (widget.onSignedOut != null) {
+      widget.onSignedOut!();
+      return;
+    }
     Navigator.of(context).pushAndRemoveUntil(
       PageRouteBuilder<void>(
         transitionDuration: const Duration(milliseconds: 360),
@@ -112,16 +120,18 @@ class _ProfilePageState extends State<ProfilePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(
-                          'Profile',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.fraunces(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w600,
-                            color: CuramindColors.ink,
+                        if (!widget.embedded) ...[
+                          Text(
+                            'Profile',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.fraunces(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w600,
+                              color: CuramindColors.ink,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 28),
+                          const SizedBox(height: 28),
+                        ],
                         _ProfileHeader(
                           nameController: _nameController,
                           roleController: _roleController,

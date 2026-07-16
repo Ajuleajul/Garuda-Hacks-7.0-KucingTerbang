@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/auth_service.dart';
+import '../../shells/clinician_shell.dart';
 import '../../theme/curamind_theme.dart';
 import '../patient/AuthPage.dart';
-import 'ProfilePage.dart';
 
 enum ClinicianAuthMode { login, register }
 
@@ -107,10 +107,11 @@ class _ClinicianLoginPageState extends State<ClinicianLoginPage>
           pageBuilder: (context, animation, secondaryAnimation) {
             return FadeTransition(
               opacity: animation,
-              child: ProfilePage(
-                name: result.user.fullName,
-                role: 'Psychiatrist',
-              ),
+            child: ClinicianShell(
+              displayName: result.user.fullName.isEmpty
+                  ? 'Clinician'
+                  : result.user.fullName,
+            ),
             );
           },
         ),
