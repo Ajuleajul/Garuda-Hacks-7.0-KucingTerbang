@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../services/link_service.dart';
 import '../../theme/curamind_theme.dart';
 
-enum ClinicianLinkStatus { none, pending, active }
+enum ClinicianLinkStatus { none, active }
 
 class ClinicianLinkPage extends StatefulWidget {
   const ClinicianLinkPage({
@@ -23,11 +24,15 @@ class _ClinicianLinkPageState extends State<ClinicianLinkPage> {
   final _codeController = TextEditingController();
 
   ClinicianLinkStatus _status = ClinicianLinkStatus.none;
-  String? _clinicianName;
-  String? _clinicianEmail;
-  String? _linkedCode;
+  PatientCareLink? _link;
+  bool _loading = true;
   bool _submitting = false;
-  bool _monitoringOn = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   @override
   void dispose() {
@@ -35,119 +40,140 @@ class _ClinicianLinkPageState extends State<ClinicianLinkPage> {
     super.dispose();
   }
 
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final link = await LinkService.instance.getMyPatientLink();
+    if (!mounted) return;
+    setState(() {
+      _link = link;
+      _status =
+          link == null ? ClinicianLinkStatus.none : ClinicianLinkStatus.active;
+      _loading = false;
+    });
+  }
+
   Future<void> _submitCode() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _submitting = true);
-    await Future<void>.delayed(const Duration(milliseconds: 650));
-    if (!mounted) return;
+    try {
+      final link =
+          await LinkService.instance.joinWithCode(_codeController.text);
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _link = link;
+        _status = ClinicianLinkStatus.active;
+        _codeController.clear();
+      });
+      _toast('Linked with ${link.clinicianName}.');
+    } on LinkFailure catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _toast(e.message, error: true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _toast(e.toString(), error: true);
+    }
+  }
 
-    final code = _codeController.text.trim().toUpperCase();
+  Future<void> _unlink() async {
+    setState(() => _submitting = true);
+    await LinkService.instance.disconnect();
+    if (!mounted) return;
     setState(() {
       _submitting = false;
-      _linkedCode = code;
-      _status = ClinicianLinkStatus.pending;
-      _clinicianName = 'Dr. Mira Santoso';
-      _clinicianEmail = 'mira.santoso@clinic.demo';
+      _link = null;
+      _status = ClinicianLinkStatus.none;
     });
+    _toast('Disconnected from clinician.');
+  }
 
+  Future<void> _toggleMonitoring(bool on) async {
+    setState(() {
+      _link = _link?.copyWith(monitoringOn: on);
+    });
+    await LinkService.instance.setMonitoring(on);
+  }
+
+  void _toast(String msg, {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: CuramindColors.sageDeep,
+        backgroundColor:
+            error ? CuramindColors.danger : CuramindColors.sageDeep,
         content: Text(
-          'Invite sent. Waiting for clinician confirmation.',
+          msg,
           style: GoogleFonts.outfit(color: CuramindColors.white),
         ),
       ),
     );
   }
 
-  Future<void> _simulateActivate() async {
-    setState(() => _submitting = true);
-    await Future<void>.delayed(const Duration(milliseconds: 400));
-    if (!mounted) return;
-    setState(() {
-      _submitting = false;
-      _status = ClinicianLinkStatus.active;
-      _monitoringOn = true;
-    });
-  }
-
-  void _unlink() {
-    setState(() {
-      _status = ClinicianLinkStatus.none;
-      _clinicianName = null;
-      _clinicianEmail = null;
-      _linkedCode = null;
-      _monitoringOn = false;
-      _codeController.clear();
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    final content = SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (!widget.embedded) ...[
-                Text(
-                  'Clinician Link',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.fraunces(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w600,
-                    color: CuramindColors.ink,
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
-              Text(
-                'Connect with your psychiatrist for remote monitoring and shared care.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  height: 1.45,
-                  color: CuramindColors.inkMuted,
+    final content = _loading
+        ? const Center(
+            child: CircularProgressIndicator(color: CuramindColors.sageDeep),
+          )
+        : SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!widget.embedded) ...[
+                      Text(
+                        'Clinician Link',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.fraunces(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w600,
+                          color: CuramindColors.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    Text(
+                      'Connect with your psychiatrist using their join code. '
+                      'You can only be linked to one clinician at a time.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        height: 1.45,
+                        color: CuramindColors.inkMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    _StatusCard(
+                      status: _status,
+                      monitoringOn: _link?.monitoringOn ?? false,
+                    ),
+                    const SizedBox(height: 18),
+                    if (_status == ClinicianLinkStatus.none)
+                      _InviteForm(
+                        formKey: _formKey,
+                        controller: _codeController,
+                        submitting: _submitting,
+                        onSubmit: _submitCode,
+                      )
+                    else if (_link != null)
+                      _LinkedClinicianCard(
+                        link: _link!,
+                        submitting: _submitting,
+                        onToggleMonitoring: _toggleMonitoring,
+                        onUnlink: _unlink,
+                      ),
+                    const SizedBox(height: 22),
+                    const _HowItWorks(),
+                  ],
                 ),
               ),
-              const SizedBox(height: 22),
-              _StatusCard(status: _status, monitoringOn: _monitoringOn),
-              const SizedBox(height: 18),
-              if (_status == ClinicianLinkStatus.none) ...[
-                _InviteForm(
-                  formKey: _formKey,
-                  controller: _codeController,
-                  submitting: _submitting,
-                  onSubmit: _submitCode,
-                ),
-              ] else ...[
-                _LinkedClinicianCard(
-                  status: _status,
-                  name: _clinicianName ?? 'Clinician',
-                  email: _clinicianEmail ?? '',
-                  code: _linkedCode ?? '',
-                  monitoringOn: _monitoringOn,
-                  onToggleMonitoring: (v) => setState(() => _monitoringOn = v),
-                  onActivateDemo: _status == ClinicianLinkStatus.pending
-                      ? _simulateActivate
-                      : null,
-                  onUnlink: _unlink,
-                  submitting: _submitting,
-                ),
-              ],
-              const SizedBox(height: 22),
-              const _HowItWorks(),
-            ],
-          ),
-        ),
-      ),
-    );
+            ),
+          );
 
     if (widget.embedded) {
       return ColoredBox(color: CuramindColors.mist, child: content);
@@ -174,21 +200,15 @@ class _StatusCard extends StatelessWidget {
     final (label, detail, color, icon) = switch (status) {
       ClinicianLinkStatus.none => (
           'Not linked',
-          'No clinician connection yet. Enter an invite code to start.',
+          'Enter a join code from your psychiatrist to connect.',
           CuramindColors.inkMuted,
           Icons.link_off_rounded,
         ),
-      ClinicianLinkStatus.pending => (
-          'Pending confirmation',
-          'Invite submitted. Your clinician still needs to accept.',
-          CuramindColors.slate,
-          Icons.hourglass_top_rounded,
-        ),
       ClinicianLinkStatus.active => (
-          monitoringOn ? 'Monitoring active' : 'Linked · monitoring paused',
+          monitoringOn ? 'Linked · monitoring on' : 'Linked · monitoring paused',
           monitoringOn
-              ? 'Remote monitoring is on. Diary and med logs can be shared.'
-              : 'You are linked, but remote monitoring is currently off.',
+              ? 'Your clinician can review shared diary & adherence.'
+              : 'You stay linked, but sharing is paused.',
           CuramindColors.sageDeep,
           Icons.verified_outlined,
         ),
@@ -207,7 +227,7 @@ class _StatusCard extends StatelessWidget {
           Container(
             width: 48,
             height: 48,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               shape: BoxShape.circle,
               color: CuramindColors.mistBlue,
             ),
@@ -272,7 +292,7 @@ class _InviteForm extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Enter invite code',
+              'Enter join code',
               style: GoogleFonts.outfit(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -281,7 +301,7 @@ class _InviteForm extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Ask your psychiatrist for a Curamind invite code.',
+              'Ask your psychiatrist for a Curamind group join code.',
               style: GoogleFonts.outfit(
                 fontSize: 13,
                 color: CuramindColors.inkMuted,
@@ -295,17 +315,15 @@ class _InviteForm extends StatelessWidget {
               onFieldSubmitted: (_) => onSubmit(),
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9\-]')),
-                LengthLimitingTextInputFormatter(12),
+                LengthLimitingTextInputFormatter(16),
               ],
               decoration: const InputDecoration(
-                labelText: 'Invite code',
+                labelText: 'Join code',
                 hintText: 'e.g. CURA-7K2M',
               ),
               validator: (v) {
                 final value = v?.trim() ?? '';
-                if (value.length < 4) {
-                  return 'Enter a valid invite code';
-                }
+                if (value.length < 4) return 'Enter a valid join code';
                 return null;
               },
             ),
@@ -321,7 +339,7 @@ class _InviteForm extends StatelessWidget {
                         color: CuramindColors.white,
                       ),
                     )
-                  : const Text('Request link'),
+                  : const Text('Join care group'),
             ),
           ],
         ),
@@ -332,26 +350,16 @@ class _InviteForm extends StatelessWidget {
 
 class _LinkedClinicianCard extends StatelessWidget {
   const _LinkedClinicianCard({
-    required this.status,
-    required this.name,
-    required this.email,
-    required this.code,
-    required this.monitoringOn,
+    required this.link,
+    required this.submitting,
     required this.onToggleMonitoring,
     required this.onUnlink,
-    required this.submitting,
-    this.onActivateDemo,
   });
 
-  final ClinicianLinkStatus status;
-  final String name;
-  final String email;
-  final String code;
-  final bool monitoringOn;
+  final PatientCareLink link;
+  final bool submitting;
   final ValueChanged<bool> onToggleMonitoring;
   final VoidCallback onUnlink;
-  final bool submitting;
-  final VoidCallback? onActivateDemo;
 
   @override
   Widget build(BuildContext context) {
@@ -395,24 +403,26 @@ class _LinkedClinicianCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      name,
+                      link.clinicianName,
                       style: GoogleFonts.outfit(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                         color: CuramindColors.ink,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      email,
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        color: CuramindColors.inkMuted,
+                    if (link.clinicianEmail.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        link.clinicianEmail,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          color: CuramindColors.inkMuted,
+                        ),
                       ),
-                    ),
+                    ],
                     const SizedBox(height: 4),
                     Text(
-                      'Code · $code',
+                      '${link.groupName} · ${link.groupCode}',
                       style: GoogleFonts.outfit(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -424,54 +434,36 @@ class _LinkedClinicianCard extends StatelessWidget {
               ),
             ],
           ),
-          if (status == ClinicianLinkStatus.active) ...[
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: CuramindColors.mistBlue.withValues(alpha: 0.55),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: SwitchListTile.adaptive(
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  'Remote monitoring',
-                  style: GoogleFonts.outfit(
-                    fontWeight: FontWeight.w600,
-                    color: CuramindColors.ink,
-                  ),
-                ),
-                subtitle: Text(
-                  monitoringOn
-                      ? 'Provider can view shared diary & adherence'
-                      : 'Sharing paused on your side',
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    color: CuramindColors.inkMuted,
-                  ),
-                ),
-                value: monitoringOn,
-                activeThumbColor: CuramindColors.sageDeep,
-                onChanged: onToggleMonitoring,
-              ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: CuramindColors.mistBlue.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(12),
             ),
-          ],
-          if (onActivateDemo != null) ...[
-            const SizedBox(height: 14),
-            FilledButton(
-              onPressed: submitting ? null : onActivateDemo,
-              child: submitting
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.4,
-                        color: CuramindColors.white,
-                      ),
-                    )
-                  : const Text('Simulate clinician accept'),
+            child: SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                'Remote monitoring',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.w600,
+                  color: CuramindColors.ink,
+                ),
+              ),
+              subtitle: Text(
+                link.monitoringOn
+                    ? 'Provider can view shared diary & adherence'
+                    : 'Sharing paused on your side',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  color: CuramindColors.inkMuted,
+                ),
+              ),
+              value: link.monitoringOn,
+              activeThumbColor: CuramindColors.sageDeep,
+              onChanged: onToggleMonitoring,
             ),
-          ],
+          ),
           const SizedBox(height: 10),
           OutlinedButton(
             onPressed: submitting ? null : onUnlink,
@@ -497,9 +489,9 @@ class _HowItWorks extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const steps = [
-      ('1', 'Get an invite code from your psychiatrist'),
-      ('2', 'Submit the code here to request a link'),
-      ('3', 'Once accepted, remote monitoring can stay active'),
+      ('1', 'Your psychiatrist creates a join code for a care group'),
+      ('2', 'Enter that code here to link (one clinician only)'),
+      ('3', 'Toggle monitoring anytime; disconnect to leave the group'),
     ];
 
     return Container(
@@ -559,14 +551,6 @@ class _HowItWorks extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
-          ),
-          Text(
-            'Demo only for now — invite codes are not validated against the server yet.',
-            style: GoogleFonts.outfit(
-              fontSize: 12,
-              height: 1.4,
-              color: CuramindColors.inkMuted,
             ),
           ),
         ],

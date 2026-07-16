@@ -5,7 +5,7 @@ import '../pages/psychiatrist/HomePage.dart';
 import '../pages/psychiatrist/PatientMonitoringDashboard.dart';
 import '../pages/psychiatrist/ProfilePage.dart';
 import '../pages/psychiatrist/DualBivariateDashboard.dart';
-
+import '../pages/psychiatrist/ClinicianJoinCodesPage.dart';
 import '../pages/psychiatrist/MedicationManagementPage.dart';
 import '../pages/psychiatrist/ExportClinicalReportPage.dart';
 import '../theme/curamind_theme.dart';
@@ -23,6 +23,7 @@ class ClinicianShell extends StatefulWidget {
 
   static const destinations = [
     NavDestination(label: 'Home', icon: Icons.home_outlined),
+    NavDestination(label: 'Codes', icon: Icons.qr_code_2_outlined),
     NavDestination(label: 'Monitor', icon: Icons.monitor_heart_outlined),
     NavDestination(label: 'Dual Chart', icon: Icons.stacked_line_chart),
     NavDestination(label: 'Meds', icon: Icons.list_alt_outlined),
@@ -57,6 +58,7 @@ class _ClinicianShellState extends State<ClinicianShell> {
         displayName: widget.displayName,
         onNavigate: _go,
       ),
+      const ClinicianJoinCodesPage(embedded: true),
       const PatientMonitoringDashboard(embedded: true),
       const DualBivariateDashboard(embedded: true),
       const MedicationManagementPage(embedded: true),

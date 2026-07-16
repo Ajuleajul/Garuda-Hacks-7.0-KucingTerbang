@@ -17,7 +17,7 @@ export const prisma = new PrismaClient({ adapter });
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
 
-app.use(cors());
+app.use(cors({ origin: true }));
 app.use(express.json());
 
 app.get("/health", (_req, res) => {
@@ -27,6 +27,8 @@ app.use('/api/link', linkRouter);
 
 startCronJobs();
 
-app.listen(port, () => {
-  console.log(`Curamind API listening on http://localhost:${port}`);
+app.listen(port, "0.0.0.0", () => {
+  console.log(`Curamind API listening on http://0.0.0.0:${port}`);
+  console.log(`  Local:   http://localhost:${port}`);
+  console.log(`  Devices: set Frontend/.env API_BASE_URL=http://<your-lan-ip>:${port}`);
 });

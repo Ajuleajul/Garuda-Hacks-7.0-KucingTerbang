@@ -1,0 +1,619 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../config/api_config.dart';
+
+DateTime? _parseDate(dynamic value) {
+  if (value == null) return null;
+  if (value is DateTime) return value;
+  if (value is String && value.isNotEmpty) return DateTime.tryParse(value);
+  return null;
+}
+
+String _asString(dynamic value, [String fallback = '']) {
+  if (value == null) return fallback;
+  return value.toString();
+}
+
+class JoinGroup {
+  const JoinGroup({
+    required this.id,
+    required this.code,
+    required this.name,
+    required this.psychiatristId,
+    required this.isActive,
+    required this.memberCount,
+    required this.createdAt,
+    this.expiresAt,
+    this.psychiatristName,
+    this.psychiatristEmail,
+  });
+
+  final String id;
+  final String code;
+  final String name;
+  final String psychiatristId;
+  final String? psychiatristName;
+  final String? psychiatristEmail;
+  final bool isActive;
+  final int memberCount;
+  final DateTime createdAt;
+  final DateTime? expiresAt;
+
+  bool get isExpired =>
+      expiresAt != null && !expiresAt!.isAfter(DateTime.now());
+
+  bool get canJoin => isActive && !isExpired;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'code': code,
+        'name': name,
+        'psychiatrist_id': psychiatristId,
+        'psychiatrist_name': psychiatristName,
+        'psychiatrist_email': psychiatristEmail,
+        'is_active': isActive,
+        'member_count': memberCount,
+        'created_at': createdAt.toIso8601String(),
+        'expires_at': expiresAt?.toIso8601String(),
+      };
+
+  factory JoinGroup.fromJson(Map<String, dynamic> json) {
+    return JoinGroup(
+      id: _asString(json['id']),
+      code: _asString(json['code']).toUpperCase(),
+      name: _asString(json['name'], 'Care group'),
+      psychiatristId: _asString(json['psychiatrist_id']),
+      psychiatristName: json['psychiatrist_name']?.toString(),
+      psychiatristEmail: json['psychiatrist_email']?.toString(),
+      isActive: json['is_active'] as bool? ?? true,
+      memberCount: (json['member_count'] as num?)?.toInt() ?? 0,
+      createdAt: _parseDate(json['created_at']) ?? DateTime.now(),
+      expiresAt: _parseDate(json['expires_at']),
+    );
+  }
+
+  JoinGroup copyWith({
+    bool? isActive,
+    int? memberCount,
+    String? name,
+    DateTime? expiresAt,
+    bool clearExpiresAt = false,
+  }) {
+    return JoinGroup(
+      id: id,
+      code: code,
+      name: name ?? this.name,
+      psychiatristId: psychiatristId,
+      psychiatristName: psychiatristName,
+      psychiatristEmail: psychiatristEmail,
+      isActive: isActive ?? this.isActive,
+      memberCount: memberCount ?? this.memberCount,
+      createdAt: createdAt,
+      expiresAt: clearExpiresAt ? null : (expiresAt ?? this.expiresAt),
+    );
+  }
+}
+
+class PatientCareLink {
+  const PatientCareLink({
+    required this.id,
+    required this.patientId,
+    required this.psychiatristId,
+    required this.groupCode,
+    required this.groupName,
+    required this.clinicianName,
+    required this.clinicianEmail,
+    required this.monitoringOn,
+    required this.linkedAt,
+  });
+
+  final String id;
+  final String patientId;
+  final String psychiatristId;
+  final String groupCode;
+  final String groupName;
+  final String clinicianName;
+  final String clinicianEmail;
+  final bool monitoringOn;
+  final DateTime linkedAt;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'patient_id': patientId,
+        'psychiatrist_id': psychiatristId,
+        'group_code': groupCode,
+        'group_name': groupName,
+        'clinician_name': clinicianName,
+        'clinician_email': clinicianEmail,
+        'monitoring_on': monitoringOn,
+        'linked_at': linkedAt.toIso8601String(),
+      };
+
+  factory PatientCareLink.fromJson(Map<String, dynamic> json) {
+    final psych = json['psychiatrist'];
+    final psychMap = psych is Map ? Map<String, dynamic>.from(psych) : null;
+    return PatientCareLink(
+      id: _asString(json['id']),
+      patientId: _asString(json['patient_id']),
+      psychiatristId: _asString(
+        json['psychiatrist_id'] ?? psychMap?['id'],
+      ),
+      groupCode: _asString(json['group_code']).toUpperCase(),
+      groupName: _asString(json['group_name'], 'Care group'),
+      clinicianName: _asString(
+        json['clinician_name'] ?? psychMap?['full_name'],
+        'Clinician',
+      ),
+      clinicianEmail: _asString(
+        json['clinician_email'] ?? psychMap?['email'],
+      ),
+      monitoringOn: json['monitoring_on'] as bool? ?? true,
+      linkedAt: _parseDate(json['linked_at']) ?? DateTime.now(),
+    );
+  }
+
+  PatientCareLink copyWith({bool? monitoringOn}) {
+    return PatientCareLink(
+      id: id,
+      patientId: patientId,
+      psychiatristId: psychiatristId,
+      groupCode: groupCode,
+      groupName: groupName,
+      clinicianName: clinicianName,
+      clinicianEmail: clinicianEmail,
+      monitoringOn: monitoringOn ?? this.monitoringOn,
+      linkedAt: linkedAt,
+    );
+  }
+}
+
+class LinkFailure implements Exception {
+  LinkFailure(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
+class CreateGroupResult {
+  const CreateGroupResult({
+    required this.group,
+    required this.syncedToServer,
+  });
+  final JoinGroup group;
+  final bool syncedToServer;
+}
+
+/// Join-code linking. Local-first so same-browser demo always works;
+/// syncs to API when Backend is reachable.
+class LinkService {
+  LinkService._();
+  static final LinkService instance = LinkService._();
+
+  static const _storeKey = 'curamind_care_link_store_v1';
+
+  String? get _uid => Supabase.instance.client.auth.currentUser?.id;
+
+  User? get _user => Supabase.instance.client.auth.currentUser;
+
+  String get _displayName {
+    final meta = _user?.userMetadata ?? {};
+    final name = meta['full_name'] as String?;
+    if (name != null && name.trim().isNotEmpty) return name.trim();
+    return _user?.email ?? 'User';
+  }
+
+  String get _email => _user?.email ?? '';
+
+  Future<Map<String, dynamic>> _readStore() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_storeKey);
+    if (raw == null || raw.isEmpty) {
+      return {'groups': <dynamic>[], 'links': <String, dynamic>{}};
+    }
+    return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+  }
+
+  Future<void> _writeStore(Map<String, dynamic> store) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_storeKey, jsonEncode(store));
+  }
+
+  String _newCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    final r = DateTime.now().microsecondsSinceEpoch;
+    final a = chars[r % chars.length];
+    final b = chars[(r ~/ 7) % chars.length];
+    final c = chars[(r ~/ 13) % chars.length];
+    final d = chars[(r ~/ 29) % chars.length];
+    final e = chars[(r ~/ 37) % chars.length];
+    final f = chars[(r ~/ 41) % chars.length];
+    return 'CURA-$a$b$c$d$e$f';
+  }
+
+  Future<void> _upsertLocalGroup(JoinGroup group) async {
+    final store = await _readStore();
+    final groups = (store['groups'] as List? ?? [])
+        .map((e) => JoinGroup.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    final i =
+        groups.indexWhere((g) => g.id == group.id || g.code == group.code);
+    if (i >= 0) {
+      groups[i] = group;
+    } else {
+      groups.insert(0, group);
+    }
+    store['groups'] = groups.map((g) => g.toJson()).toList();
+    await _writeStore(store);
+  }
+
+  Future<void> _saveLocalPatientLink(PatientCareLink link) async {
+    final store = await _readStore();
+    final links = Map<String, dynamic>.from(store['links'] as Map? ?? {});
+    links[link.patientId] = link.toJson();
+    store['links'] = links;
+    await _writeStore(store);
+  }
+
+  /// Returns true when Backend /health responds.
+  Future<bool> pingHealth() async {
+    try {
+      final res = await http
+          .get(Uri.parse('${ApiConfig.baseUrl}/health'))
+          .timeout(const Duration(seconds: 3));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Create on server (required for 2 devices / 2 emulators).
+  /// Falls back to local-only only if [allowOffline] is true.
+  Future<CreateGroupResult> createGroup({
+    String? name,
+    int? expiresInMinutes,
+    bool allowOffline = true,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw LinkFailure('Sign in required.');
+
+    DateTime? expiresAt;
+    if (expiresInMinutes != null && expiresInMinutes > 0) {
+      expiresAt = DateTime.now().add(Duration(minutes: expiresInMinutes));
+    }
+
+    Object? lastError;
+    try {
+      final res = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/api/link/groups'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'psychiatrist_id': uid,
+              'psychiatrist_name': _displayName,
+              'psychiatrist_email': _email,
+              'name': name?.trim().isNotEmpty == true
+                  ? name!.trim()
+                  : 'Care group',
+              'expires_in_minutes': expiresInMinutes,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode == 201 || res.statusCode == 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        final group = JoinGroup.fromJson(
+          Map<String, dynamic>.from(body['group'] as Map),
+        );
+        await _upsertLocalGroup(group);
+        return CreateGroupResult(group: group, syncedToServer: true);
+      }
+      lastError = 'HTTP ${res.statusCode}: ${res.body}';
+    } catch (e) {
+      lastError = e;
+    }
+
+    if (!allowOffline) {
+      throw LinkFailure(
+        'Cannot reach Backend at ${ApiConfig.baseUrl}. '
+        'Start the API, then for a physical phone set API_BASE_URL '
+        'in Frontend/.env to your PC LAN IP (e.g. http://192.168.0.5:3000). '
+        '($lastError)',
+      );
+    }
+
+    final store = await _readStore();
+    final groups = (store['groups'] as List? ?? [])
+        .map((e) => JoinGroup.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+
+    var code = _newCode();
+    while (groups.any((g) => g.code == code)) {
+      code = _newCode();
+    }
+
+    final group = JoinGroup(
+      id: 'local-${DateTime.now().microsecondsSinceEpoch}',
+      code: code,
+      name: (name?.trim().isNotEmpty == true) ? name!.trim() : 'Care group',
+      psychiatristId: uid,
+      psychiatristName: _displayName,
+      psychiatristEmail: _email,
+      isActive: true,
+      memberCount: 0,
+      createdAt: DateTime.now(),
+      expiresAt: expiresAt,
+    );
+    groups.insert(0, group);
+    store['groups'] = groups.map((g) => g.toJson()).toList();
+    await _writeStore(store);
+    return CreateGroupResult(group: group, syncedToServer: false);
+  }
+
+  Future<List<JoinGroup>> listMyGroups() async {
+    final uid = _uid;
+    if (uid == null) return [];
+
+    final store = await _readStore();
+    final existing = (store['groups'] as List? ?? [])
+        .map((e) => JoinGroup.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    final localMine =
+        existing.where((g) => g.psychiatristId == uid).toList();
+
+    try {
+      final res = await http
+          .get(Uri.parse('${ApiConfig.baseUrl}/api/link/groups/$uid'))
+          .timeout(const Duration(seconds: 6));
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        final remote = (body['groups'] as List? ?? [])
+            .map((e) => JoinGroup.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+        final remoteCodes = remote.map((g) => g.code).toSet();
+        final localOnly = localMine
+            .where((g) => !remoteCodes.contains(g.code))
+            .toList();
+        final others =
+            existing.where((g) => g.psychiatristId != uid).toList();
+        final merged = [...remote, ...localOnly, ...others];
+        store['groups'] = merged.map((g) => g.toJson()).toList();
+        await _writeStore(store);
+        return [...remote, ...localOnly];
+      }
+    } catch (_) {}
+
+    return localMine;
+  }
+
+  /// Update local store immediately, then sync API.
+  Future<JoinGroup> setGroupActive(String groupId, bool active) async {
+    final store = await _readStore();
+    final groups = (store['groups'] as List? ?? [])
+        .map((e) => JoinGroup.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    final i = groups.indexWhere((g) => g.id == groupId);
+    if (i < 0) throw LinkFailure('Group not found.');
+
+    groups[i] = groups[i].copyWith(isActive: active);
+    store['groups'] = groups.map((g) => g.toJson()).toList();
+    await _writeStore(store);
+    final local = groups[i];
+
+    if (!groupId.startsWith('local-')) {
+      try {
+        final res = await http
+            .patch(
+              Uri.parse('${ApiConfig.baseUrl}/api/link/groups/$groupId'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'is_active': active}),
+            )
+            .timeout(const Duration(seconds: 6));
+        if (res.statusCode == 200) {
+          final body = jsonDecode(res.body) as Map<String, dynamic>;
+          final remote = JoinGroup.fromJson(
+            Map<String, dynamic>.from(body['group'] as Map),
+          );
+          await _upsertLocalGroup(remote);
+          return remote;
+        }
+      } catch (_) {}
+    }
+
+    return local;
+  }
+
+  Future<PatientCareLink?> getMyPatientLink() async {
+    final uid = _uid;
+    if (uid == null) return null;
+
+    try {
+      final res = await http
+          .get(Uri.parse('${ApiConfig.baseUrl}/api/link/patient/$uid'))
+          .timeout(const Duration(seconds: 6));
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        final linkJson = body['link'];
+        if (linkJson != null) {
+          final link = PatientCareLink.fromJson(
+            Map<String, dynamic>.from(linkJson as Map)..['patient_id'] = uid,
+          );
+          await _saveLocalPatientLink(link);
+          return link;
+        }
+      }
+    } catch (_) {}
+
+    final store = await _readStore();
+    final links = Map<String, dynamic>.from(store['links'] as Map? ?? {});
+    final raw = links[uid];
+    if (raw == null) return null;
+    return PatientCareLink.fromJson(Map<String, dynamic>.from(raw as Map));
+  }
+
+  Future<PatientCareLink> joinWithCode(String code) async {
+    final uid = _uid;
+    if (uid == null) throw LinkFailure('Sign in required.');
+
+    final upper = code.trim().toUpperCase().replaceAll(RegExp(r'\s+'), '');
+    if (upper.length < 4) throw LinkFailure('Enter a valid join code.');
+
+    // API first — required when psych & patient are on different devices/windows.
+    try {
+      final res = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/api/link/join'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'patient_id': uid,
+              'patient_name': _displayName,
+              'code': upper,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      if (res.statusCode == 200) {
+        final link = PatientCareLink.fromJson(
+          Map<String, dynamic>.from(body['link'] as Map)..['patient_id'] = uid,
+        );
+        await _saveLocalPatientLink(link);
+        return link;
+      }
+      if (res.statusCode == 409) {
+        throw LinkFailure(
+          body['error'] as String? ??
+              'You are already linked to a psychiatrist. Disconnect first.',
+        );
+      }
+      // 404 etc. — try local before surfacing
+      final apiMsg = body['error'] as String?;
+      try {
+        return await _joinLocal(uid, upper);
+      } on LinkFailure {
+        throw LinkFailure(
+          apiMsg ??
+              'Invalid or inactive join code. '
+                  'Use a code generated while Backend was online '
+                  '(API: ${ApiConfig.baseUrl}).',
+        );
+      }
+    } on LinkFailure {
+      rethrow;
+    } catch (_) {
+      // Network error — same-device local fallback
+      try {
+        return await _joinLocal(uid, upper);
+      } on LinkFailure catch (e) {
+        if (e.message.contains('already linked')) rethrow;
+        throw LinkFailure(
+          'Cannot reach Backend at ${ApiConfig.baseUrl} and code not found locally. '
+          'Start the API (and on a physical phone set API_BASE_URL).',
+        );
+      }
+    }
+  }
+
+  Future<PatientCareLink> _joinLocal(String uid, String upper) async {
+    final store = await _readStore();
+    final links = Map<String, dynamic>.from(store['links'] as Map? ?? {});
+    if (links.containsKey(uid)) {
+      throw LinkFailure(
+        'You are already linked to a psychiatrist. Disconnect first.',
+      );
+    }
+
+    final groups = (store['groups'] as List? ?? [])
+        .map((e) => JoinGroup.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    final gIdx = groups.indexWhere((g) => g.code == upper);
+    if (gIdx < 0) {
+      throw LinkFailure('Invalid or inactive join code.');
+    }
+    if (groups[gIdx].isExpired) {
+      throw LinkFailure(
+        'This join code has expired. Ask your psychiatrist for a new one.',
+      );
+    }
+    if (!groups[gIdx].isActive) {
+      throw LinkFailure('This join code is deactivated.');
+    }
+
+    final group = groups[gIdx];
+    final link = PatientCareLink(
+      id: 'link-${DateTime.now().microsecondsSinceEpoch}',
+      patientId: uid,
+      psychiatristId: group.psychiatristId,
+      groupCode: group.code,
+      groupName: group.name,
+      clinicianName: group.psychiatristName ?? 'Clinician',
+      clinicianEmail: group.psychiatristEmail ?? '',
+      monitoringOn: true,
+      linkedAt: DateTime.now(),
+    );
+    links[uid] = link.toJson();
+    groups[gIdx] = group.copyWith(memberCount: group.memberCount + 1);
+    store['links'] = links;
+    store['groups'] = groups.map((g) => g.toJson()).toList();
+    await _writeStore(store);
+    return link;
+  }
+
+  Future<void> setMonitoring(bool on) async {
+    final uid = _uid;
+    if (uid == null) return;
+
+    final store = await _readStore();
+    final links = Map<String, dynamic>.from(store['links'] as Map? ?? {});
+    final raw = links[uid];
+    if (raw != null) {
+      final link =
+          PatientCareLink.fromJson(Map<String, dynamic>.from(raw as Map));
+      links[uid] = link.copyWith(monitoringOn: on).toJson();
+      store['links'] = links;
+      await _writeStore(store);
+    }
+
+    try {
+      await http
+          .patch(
+            Uri.parse('${ApiConfig.baseUrl}/api/link/patient/$uid/monitoring'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'monitoring_on': on}),
+          )
+          .timeout(const Duration(seconds: 6));
+    } catch (_) {}
+  }
+
+  Future<void> disconnect() async {
+    final uid = _uid;
+    if (uid == null) return;
+
+    final store = await _readStore();
+    final links = Map<String, dynamic>.from(store['links'] as Map? ?? {});
+    final raw = links.remove(uid);
+    if (raw != null) {
+      final link =
+          PatientCareLink.fromJson(Map<String, dynamic>.from(raw as Map));
+      final groups = (store['groups'] as List? ?? [])
+          .map((e) => JoinGroup.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+      final i = groups.indexWhere((g) => g.code == link.groupCode);
+      if (i >= 0) {
+        groups[i] = groups[i].copyWith(
+          memberCount: (groups[i].memberCount - 1).clamp(0, 9999),
+        );
+      }
+      store['groups'] = groups.map((g) => g.toJson()).toList();
+    }
+    store['links'] = links;
+    await _writeStore(store);
+
+    try {
+      await http
+          .delete(Uri.parse('${ApiConfig.baseUrl}/api/link/patient/$uid'))
+          .timeout(const Duration(seconds: 6));
+    } catch (_) {}
+  }
+}

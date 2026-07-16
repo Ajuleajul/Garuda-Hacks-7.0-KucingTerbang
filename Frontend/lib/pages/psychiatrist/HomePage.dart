@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../theme/curamind_theme.dart';
 
 /// Clinician shell indices (with Home at 0):
-/// 0 Home · 1 Monitor · 2 Dual Chart · 3 Prescribe · 4 Meds · 5 Export · 6 Profile
+/// 0 Home · 1 Codes · 2 Monitor · 3 Dual Chart · 4 Meds · 5 Export · 6 Profile
 class ClinicianHomePage extends StatelessWidget {
   const ClinicianHomePage({
     super.key,
@@ -15,9 +15,9 @@ class ClinicianHomePage extends StatelessWidget {
   final String displayName;
   final ValueChanged<int> onNavigate;
 
-  static const monitorIndex = 1;
-  static const dualChartIndex = 2;
-  static const prescribeIndex = 3;
+  static const codesIndex = 1;
+  static const monitorIndex = 2;
+  static const dualChartIndex = 3;
   static const medsIndex = 4;
   static const exportIndex = 5;
   static const profileIndex = 6;
@@ -93,6 +93,13 @@ class ClinicianHomePage extends StatelessWidget {
                   onTap: () => onNavigate(monitorIndex),
                 ),
                 const SizedBox(height: 10),
+                _PrimaryTile(
+                  title: 'Join codes',
+                  subtitle: 'Create groups so patients can link',
+                  icon: Icons.qr_code_2_outlined,
+                  onTap: () => onNavigate(codesIndex),
+                ),
+                const SizedBox(height: 10),
                 Row(
                   children: [
                     Expanded(
@@ -106,10 +113,10 @@ class ClinicianHomePage extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: _SecondaryTile(
-                        title: 'Prescribe',
-                        subtitle: 'Adjust dosages',
-                        icon: Icons.medication_liquid_outlined,
-                        onTap: () => onNavigate(prescribeIndex),
+                        title: 'Meds',
+                        subtitle: 'Schedules & logs',
+                        icon: Icons.list_alt_outlined,
+                        onTap: () => onNavigate(medsIndex),
                       ),
                     ),
                   ],
@@ -148,6 +155,11 @@ class ClinicianHomePage extends StatelessWidget {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
+                    _ToolChip(
+                      label: 'Join codes',
+                      icon: Icons.qr_code_2_outlined,
+                      onTap: () => onNavigate(codesIndex),
+                    ),
                     _ToolChip(
                       label: 'Med logs',
                       icon: Icons.list_alt_outlined,
