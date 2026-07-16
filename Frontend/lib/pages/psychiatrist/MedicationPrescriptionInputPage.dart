@@ -59,10 +59,7 @@ class _MedicationPrescriptionInputPageState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        child: SingleChildScrollView(
+    return SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 600),
@@ -264,7 +261,6 @@ class _MedicationPrescriptionInputPageState
                 ],
               ),
             ),
-          ),
         ),
       ),
     );

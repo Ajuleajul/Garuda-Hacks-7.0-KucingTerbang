@@ -23,10 +23,7 @@ class _DualBivariateDashboardState extends State<DualBivariateDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        child: SingleChildScrollView(
+    return SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -189,7 +186,6 @@ class _DualBivariateDashboardState extends State<DualBivariateDashboard> {
               ),
             ],
           ),
-        ),
       ),
     );
   }

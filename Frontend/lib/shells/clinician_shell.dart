@@ -3,7 +3,14 @@ import 'package:flutter/material.dart';
 import '../pages/psychiatrist/ClinicianLoginPage.dart';
 import '../pages/psychiatrist/HomePage.dart';
 import '../pages/psychiatrist/PatientMonitoringDashboard.dart';
+<<<<<<< Updated upstream
 import '../pages/psychiatrist/ProfilePage.dart';
+=======
+import '../pages/psychiatrist/DualBivariateDashboard.dart';
+import '../pages/psychiatrist/MedicationPrescriptionInputPage.dart';
+import '../pages/psychiatrist/MedicationManagementPage.dart';
+import '../pages/psychiatrist/ExportClinicalReportPage.dart';
+>>>>>>> Stashed changes
 import '../theme/curamind_theme.dart';
 import '../widgets/coming_soon_page.dart';
 import '../widgets/curamind_app_header.dart';
@@ -56,26 +63,10 @@ class _ClinicianShellState extends State<ClinicianShell> {
         onNavigate: _go,
       ),
       const PatientMonitoringDashboard(),
-      const ComingSoonPage(
-        title: 'Dual-Correlation',
-        subtitle: 'Mood × adherence detail chart for a selected patient.',
-        icon: Icons.stacked_line_chart,
-      ),
-      const ComingSoonPage(
-        title: 'Prescription Input',
-        subtitle: 'Adjust dosages and manage active prescriptions.',
-        icon: Icons.medication_liquid_outlined,
-      ),
-      const ComingSoonPage(
-        title: 'Medication Management',
-        subtitle: 'Digital medication log and session notes coming next.',
-        icon: Icons.list_alt_outlined,
-      ),
-      const ComingSoonPage(
-        title: 'Export Report',
-        subtitle: 'Export longitudinal clinical data to PDF / EMR.',
-        icon: Icons.picture_as_pdf_outlined,
-      ),
+      const DualBivariateDashboard(),
+      const MedicationPrescriptionInputPage(),
+      const MedicationManagementPage(),
+      const ExportClinicalReportPage(),
       ProfilePage(
         name: widget.displayName,
         role: 'Psychiatrist',

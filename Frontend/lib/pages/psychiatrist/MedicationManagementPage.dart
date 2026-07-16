@@ -44,96 +44,91 @@ class MedicationManagementPage extends StatelessWidget {
       },
     ];
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Active Prescriptions',
+            style: GoogleFonts.outfit(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: CuramindColors.ink,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Manage ongoing patient medications and refill statuses.',
+            style: GoogleFonts.outfit(
+              fontSize: 15,
+              color: CuramindColors.inkMuted,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Row(
             children: [
-              Text(
-                'Active Prescriptions',
-                style: GoogleFonts.outfit(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: CuramindColors.ink,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Manage ongoing patient medications and refill statuses.',
-                style: GoogleFonts.outfit(
-                  fontSize: 15,
-                  color: CuramindColors.inkMuted,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: CuramindColors.white,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: CuramindColors.sageSoft),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.search_rounded, color: CuramindColors.slate),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextField(
-                              decoration: InputDecoration(
-                                hintText: 'Search patient or medication...',
-                                hintStyle: GoogleFonts.outfit(
-                                  color: CuramindColors.inkMuted,
-                                ),
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                filled: false,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: CuramindColors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: CuramindColors.sageSoft),
                   ),
-                  const SizedBox(width: 12),
-                  CursorHoverRegion(
-                    child: FilledButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(Icons.filter_list_rounded, size: 20),
-                      label: const Text('Filter'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: CuramindColors.white,
-                        foregroundColor: CuramindColors.slate,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          side: const BorderSide(color: CuramindColors.sageSoft),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.search_rounded, color: CuramindColors.slate),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          decoration: InputDecoration(
+                            hintText: 'Search patient or medication...',
+                            hintStyle: GoogleFonts.outfit(
+                              color: CuramindColors.inkMuted,
+                            ),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            filled: false,
+                          ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              CursorHoverRegion(
+                child: FilledButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.filter_list_rounded, size: 20),
+                  label: const Text('Filter'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: CuramindColors.white,
+                    foregroundColor: CuramindColors.slate,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: const BorderSide(color: CuramindColors.sageSoft),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: activeMeds.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 16),
-                itemBuilder: (context, index) {
-                  return _MedicationCard(data: activeMeds[index]);
-                },
+                ),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 24),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: activeMeds.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 16),
+            itemBuilder: (context, index) {
+              return _MedicationCard(data: activeMeds[index]);
+            },
+          ),
+        ],
       ),
     );
   }
