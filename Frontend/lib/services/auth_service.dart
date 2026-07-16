@@ -1,9 +1,4 @@
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../config/api_config.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthUser {
   const AuthUser({
@@ -20,15 +15,15 @@ class AuthUser {
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
     return AuthUser(
-      id: json['id'] as String,
-      email: json['email'] as String,
-      fullName: json['full_name'] as String,
-      role: json['role'] as String,
+      id: json['id'] as String? ?? json['sub'] as String? ?? '',
+      email: json['email'] as String? ?? '',
+      fullName: json['user_metadata']?['full_name'] as String? ?? json['full_name'] as String? ?? 'Unknown',
+      role: json['user_metadata']?['role'] as String? ?? json['role'] as String? ?? 'PATIENT',
     );
   }
 
-  bool get isPatient => role == 'PASIEN';
-  bool get isPsychiatrist => role == 'PSIKIATER';
+  bool get isPatient => role == 'PATIENT';
+  bool get isPsychiatrist => role == 'PSYCHIATRIST';
 }
 
 class AuthResult {
@@ -50,8 +45,7 @@ class AuthService {
   AuthService._();
   static final AuthService instance = AuthService._();
 
-  static const _tokenKey = 'auth_token';
-  static const _userKey = 'auth_user';
+  final _supabase = Supabase.instance.client;
 
   Future<AuthResult> register({
     required String email,
@@ -59,17 +53,32 @@ class AuthService {
     required String fullName,
     required String role,
   }) async {
-    final response = await http.post(
-      Uri.parse('${ApiConfig.baseUrl}/auth/register'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'email': email.trim(),
-        'password': password,
-        'full_name': fullName.trim(),
-        'role': role,
-      }),
-    );
-    return _handleAuthResponse(response);
+    try {
+      final res = await _supabase.auth.signUp(
+        email: email.trim(),
+        password: password,
+        data: {
+          'full_name': fullName.trim(),
+          'role': role,
+        },
+      );
+      
+      final session = res.session;
+      final user = res.user;
+      
+      if (session == null || user == null) {
+        throw AuthException('Registration Successfull, please confirm your email.');
+      }
+      
+      return AuthResult(
+        token: session.accessToken,
+        user: AuthUser.fromJson(user.toJson()),
+      );
+    } on AuthException catch (e) {
+      throw AuthException(e.message);
+    } catch (e) {
+      throw AuthException(e.toString());
+    }
   }
 
   Future<AuthResult> login({
@@ -77,73 +86,41 @@ class AuthService {
     required String password,
     String? role,
   }) async {
-    final body = <String, dynamic>{
-      'email': email.trim(),
-      'password': password,
-    };
-    if (role != null) body['role'] = role;
-
-    final response = await http.post(
-      Uri.parse('${ApiConfig.baseUrl}/auth/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(body),
-    );
-    return _handleAuthResponse(response);
-  }
-
-  Future<AuthResult> _handleAuthResponse(http.Response response) async {
-    Map<String, dynamic> data = {};
     try {
-      data = jsonDecode(response.body) as Map<String, dynamic>;
-    } catch (_) {}
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw AuthException(
-        (data['message'] as String?) ??
-            'Request failed (${response.statusCode})',
+      final res = await _supabase.auth.signInWithPassword(
+        email: email.trim(),
+        password: password,
       );
+      
+      final session = res.session;
+      final user = res.user;
+      
+      if (session == null || user == null) {
+        throw AuthException('Login failed. Please check your credentials.');
+      }
+      
+      return AuthResult(
+        token: session.accessToken,
+        user: AuthUser.fromJson(user.toJson()),
+      );
+    } on AuthException catch (e) {
+      throw AuthException(e.message);
+    } catch (e) {
+      throw AuthException(e.toString());
     }
-
-    final token = data['token'] as String?;
-    final userJson = data['user'] as Map<String, dynamic>?;
-    if (token == null || userJson == null) {
-      throw AuthException('Invalid server response');
-    }
-
-    final user = AuthUser.fromJson(userJson);
-    await _persist(token, user);
-    return AuthResult(token: token, user: user);
-  }
-
-  Future<void> _persist(String token, AuthUser user) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, token);
-    await prefs.setString(
-      _userKey,
-      jsonEncode({
-        'id': user.id,
-        'email': user.email,
-        'full_name': user.fullName,
-        'role': user.role,
-      }),
-    );
   }
 
   Future<String?> getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_tokenKey);
+    return _supabase.auth.currentSession?.accessToken;
   }
 
   Future<AuthUser?> getSavedUser() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_userKey);
-    if (raw == null) return null;
-    return AuthUser.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    final user = _supabase.auth.currentUser;
+    if (user == null) return null;
+    return AuthUser.fromJson(user.toJson());
   }
 
   Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_tokenKey);
-    await prefs.remove(_userKey);
+    await _supabase.auth.signOut();
   }
 }

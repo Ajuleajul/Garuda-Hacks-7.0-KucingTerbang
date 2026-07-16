@@ -90,13 +90,13 @@ class _ClinicianLoginPageState extends State<ClinicianLoginPage>
           email: _emailController.text,
           password: _passwordController.text,
           fullName: _nameController.text,
-          role: 'PSIKIATER',
+          role: 'PSYCHIATRIST',
         );
       } else {
         result = await auth.login(
           email: _emailController.text,
           password: _passwordController.text,
-          role: 'PSIKIATER',
+          role: 'PSYCHIATRIST',
         );
       }
 

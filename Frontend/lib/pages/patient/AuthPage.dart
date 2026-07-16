@@ -86,13 +86,13 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
           email: _emailController.text,
           password: _passwordController.text,
           fullName: _nameController.text,
-          role: 'PASIEN',
+          role: 'PATIENT',
         );
       } else {
         result = await auth.login(
           email: _emailController.text,
           password: _passwordController.text,
-          role: 'PASIEN',
+          role: 'PATIENT',
         );
       }
 
