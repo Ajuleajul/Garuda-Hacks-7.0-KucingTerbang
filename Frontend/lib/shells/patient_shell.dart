@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../pages/patient/AuthPage.dart';
 import '../pages/patient/ClinicianLinkPage.dart';
 import '../pages/patient/DistressKitPage.dart';
 import '../pages/patient/EMADiaryPage.dart';
-import '../pages/patient/HomePage.dart';
 import '../pages/patient/MedicationViewPage.dart';
 import '../pages/patient/PersonalDashboardPage.dart';
 import '../pages/patient/ProfilePage.dart';
@@ -39,8 +39,6 @@ class _PatientShellState extends State<PatientShell> {
   late int _index;
   late final List<Widget> _pages;
 
-  void _go(int i) => setState(() => _index = i);
-
   void _signOut() {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const AuthPage()),
@@ -53,10 +51,7 @@ class _PatientShellState extends State<PatientShell> {
     super.initState();
     _index = widget.initialIndex.clamp(0, PatientShell.destinations.length - 1);
     _pages = [
-      PatientHomePage(
-        displayName: widget.displayName,
-        onNavigate: _go,
-      ),
+      _PatientHomeBody(name: widget.displayName),
       const EMADiaryPage(embedded: true),
       const MedicationViewPage(embedded: true),
       const DistressKitPage(embedded: true),
@@ -78,10 +73,55 @@ class _PatientShellState extends State<PatientShell> {
       appBar: CuramindAppHeader(
         destinations: PatientShell.destinations,
         selectedIndex: _index,
-        onDestinationSelected: _go,
+        onDestinationSelected: (i) => setState(() => _index = i),
         userLabel: 'Patient',
       ),
       body: IndexedStack(index: _index, children: _pages),
+    );
+  }
+}
+
+class _PatientHomeBody extends StatelessWidget {
+  const _PatientHomeBody({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: CuramindColors.mist,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Hello, $name',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.fraunces(
+                    fontSize: 34,
+                    fontWeight: FontWeight.w600,
+                    color: CuramindColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Use the header to open diary, medications, distress tools, and your dashboard.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(
+                    fontSize: 15,
+                    height: 1.45,
+                    color: CuramindColors.inkMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
