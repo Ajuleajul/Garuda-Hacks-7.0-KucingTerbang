@@ -2,17 +2,40 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
-class CursorHoverRegion extends StatelessWidget {
+class CursorHoverRegion extends StatefulWidget {
   final Widget child;
   const CursorHoverRegion({super.key, required this.child});
+
+  @override
+  State<CursorHoverRegion> createState() => _CursorHoverRegionState();
+}
+
+class _CursorHoverRegionState extends State<CursorHoverRegion> {
+  bool _isHovering = false;
+
+  @override
+  void dispose() {
+    if (_isHovering) {
+      Future.microtask(() {
+        AnimatedCustomCursor.isHoveringClickable.value = false;
+      });
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
       cursor: SystemMouseCursors.none,
-      onEnter: (_) => AnimatedCustomCursor.isHoveringClickable.value = true,
-      onExit: (_) => AnimatedCustomCursor.isHoveringClickable.value = false,
-      child: child,
+      onEnter: (_) {
+        _isHovering = true;
+        AnimatedCustomCursor.isHoveringClickable.value = true;
+      },
+      onExit: (_) {
+        _isHovering = false;
+        AnimatedCustomCursor.isHoveringClickable.value = false;
+      },
+      child: widget.child,
     );
   }
 }

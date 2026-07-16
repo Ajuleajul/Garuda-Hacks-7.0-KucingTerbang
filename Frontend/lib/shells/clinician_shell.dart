@@ -85,7 +85,7 @@ class _ClinicianShellState extends State<ClinicianShell> {
         userLabel: 'Clinic',
         showNav: !mobile,
       ),
-      body: IndexedStack(index: _index, children: _pages),
+      body: _pages[_index],
       bottomNavigationBar: mobile
           ? CuramindBottomNav(
               destinations: ClinicianShell.destinations,
