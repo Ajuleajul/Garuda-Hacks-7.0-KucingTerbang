@@ -177,7 +177,7 @@ class CuramindBottomNav extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ),
+                  )),
                 );
               }),
             ),
