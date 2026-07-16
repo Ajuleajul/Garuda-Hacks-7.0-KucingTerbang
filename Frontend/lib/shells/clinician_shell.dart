@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../pages/psychiatrist/ClinicianLoginPage.dart';
-import '../pages/psychiatrist/ProfilePage.dart';
+import '../pages/psychiatrist/HomePage.dart';
 import '../pages/psychiatrist/PatientMonitoringDashboard.dart';
+import '../pages/psychiatrist/ProfilePage.dart';
 import '../theme/curamind_theme.dart';
 import '../widgets/coming_soon_page.dart';
 import '../widgets/curamind_app_header.dart';
@@ -19,6 +19,7 @@ class ClinicianShell extends StatefulWidget {
   final int initialIndex;
 
   static const destinations = [
+    NavDestination(label: 'Home', icon: Icons.home_outlined),
     NavDestination(label: 'Monitor', icon: Icons.monitor_heart_outlined),
     NavDestination(label: 'Dual Chart', icon: Icons.stacked_line_chart),
     NavDestination(label: 'Prescribe', icon: Icons.medication_liquid_outlined),
@@ -35,6 +36,8 @@ class _ClinicianShellState extends State<ClinicianShell> {
   late int _index;
   late final List<Widget> _pages;
 
+  void _go(int i) => setState(() => _index = i);
+
   void _signOut() {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const ClinicianLoginPage()),
@@ -48,6 +51,10 @@ class _ClinicianShellState extends State<ClinicianShell> {
     _index =
         widget.initialIndex.clamp(0, ClinicianShell.destinations.length - 1);
     _pages = [
+      ClinicianHomePage(
+        displayName: widget.displayName,
+        onNavigate: _go,
+      ),
       const PatientMonitoringDashboard(),
       const ComingSoonPage(
         title: 'Dual-Correlation',
@@ -85,55 +92,10 @@ class _ClinicianShellState extends State<ClinicianShell> {
       appBar: CuramindAppHeader(
         destinations: ClinicianShell.destinations,
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: _go,
         userLabel: 'Clinic',
       ),
       body: IndexedStack(index: _index, children: _pages),
-    );
-  }
-}
-
-class _ClinicianHomeBody extends StatelessWidget {
-  const _ClinicianHomeBody({required this.name});
-
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: CuramindColors.mist,
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Welcome, $name',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.fraunces(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w600,
-                    color: CuramindColors.ink,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'Patient monitoring lives here. Use the header to move between clinical tools.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(
-                    fontSize: 15,
-                    height: 1.45,
-                    color: CuramindColors.inkMuted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
