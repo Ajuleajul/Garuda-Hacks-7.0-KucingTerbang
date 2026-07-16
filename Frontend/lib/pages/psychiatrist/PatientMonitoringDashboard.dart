@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../animated_cursor.dart';
 import '../../theme/curamind_theme.dart';
+import 'PatientDetailsPage.dart';
 
 class MockPatient {
   final String id;
@@ -142,11 +143,9 @@ class _PatientCard extends StatelessWidget {
     return CursorHoverRegion(
       child: InkWell(
         onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Viewing details for ${patient.name}'),
-              behavior: SnackBarBehavior.floating,
-              backgroundColor: CuramindColors.sageDeep,
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => PatientDetailsPage(patient: patient),
             ),
           );
         },
@@ -208,27 +207,18 @@ class _PatientCard extends StatelessWidget {
                   color: CuramindColors.inkMuted,
                 ),
               ),
-              const Spacer(),
-              if (patient.hasNssiAlert)
-                _AlertBadge(
-                  label: 'NSSI Urge Logged',
-                  color: Colors.redAccent,
+              const SizedBox(height: 12),
+              Expanded(
+                flex: 3,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: _MiniSparkline(moods: patient.recentMood),
                 ),
-              if (patient.missedMedicationAlert) ...[
-                if (patient.hasNssiAlert) const SizedBox(height: 6),
-                _AlertBadge(
-                  label: 'Missed Medication',
-                  color: Colors.orangeAccent,
-                ),
-              ],
-              if (!hasAlert)
-                _AlertBadge(
-                  label: 'Stable',
-                  color: CuramindColors.sageDeep,
-                ),
-              const Spacer(),
+              ),
+              const SizedBox(height: 12),
               const Divider(height: 1, color: CuramindColors.sageSoft),
-              const Spacer(),
+              const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -256,11 +246,27 @@ class _PatientCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  Container(
-                    height: 30,
-                    width: 60,
-                    alignment: Alignment.centerRight,
-                    child: _MiniSparkline(moods: patient.recentMood),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (patient.hasNssiAlert)
+                        _AlertBadge(
+                          label: 'NSSI Urge Logged',
+                          color: Colors.redAccent,
+                        ),
+                      if (patient.missedMedicationAlert) ...[
+                        if (patient.hasNssiAlert) const SizedBox(height: 4),
+                        _AlertBadge(
+                          label: 'Missed Medication',
+                          color: Colors.orangeAccent,
+                        ),
+                      ],
+                      if (!hasAlert)
+                        _AlertBadge(
+                          label: 'Stable',
+                          color: CuramindColors.sageDeep,
+                        ),
+                    ],
                   ),
                 ],
               ),
@@ -281,16 +287,16 @@ class _AlertBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(4),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,
         style: GoogleFonts.outfit(
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: FontWeight.w600,
           color: color,
         ),
@@ -308,8 +314,8 @@ class _MiniSparkline extends StatelessWidget {
   Widget build(BuildContext context) {
     if (moods.isEmpty) return const SizedBox.shrink();
     return CustomPaint(
-      size: const Size(60, 30),
       painter: _SparklinePainter(moods: moods, color: CuramindColors.sageDeep),
+      child: const SizedBox.expand(),
     );
   }
 }
