@@ -30,6 +30,42 @@ model User {
   psychiatrist_notes            SessionNote[]             @relation("PsychiatristSessionNotes")
 }
 
+/// One join code = one care group under a psychiatrist.
+/// psychiatrist_id is the auth user id (Supabase / app user id).
+model JoinGroup {
+  id                  String    @id @default(uuid())
+  psychiatrist_id     String
+  psychiatrist_name   String?
+  psychiatrist_email  String?
+  code                String    @unique
+  name                String
+  is_active           Boolean   @default(true)
+  /// Null = never expires. Psychiatrist chooses duration when creating.
+  expires_at          DateTime?
+  created_at          DateTime  @default(now())
+
+  care_links          CareLink[]
+
+  @@index([psychiatrist_id])
+}
+
+/// Patient ↔ psychiatrist binding via a join group.
+/// One patient may only have one care link (one psychiatrist).
+model CareLink {
+  id               String     @id @default(uuid())
+  patient_id       String     @unique
+  patient_name     String?
+  psychiatrist_id  String
+  join_group_id    String
+  status           LinkStatus @default(ACTIVE)
+  monitoring_on    Boolean    @default(true)
+  created_at       DateTime   @default(now())
+
+  join_group       JoinGroup  @relation(fields: [join_group_id], references: [id])
+
+  @@index([psychiatrist_id])
+}
+
 model MoodLog {
   id             String   @id @default(uuid())
   patient_id     String
