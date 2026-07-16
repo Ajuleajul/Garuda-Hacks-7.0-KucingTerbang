@@ -13,16 +13,16 @@ async function main() {
     const dr = await prisma.user.create({
         data: {
             email: 'doctor@garudahacks.com',
-            full_name: 'Dr. Alan Psikiater',
-            role: Role.PSIKIATER,
+            full_name: 'Dr. Alan Psychiatrist',
+            role: Role.PSYCHIATRIST,
         },
     });
 
     const patient = await prisma.user.create({
         data: {
             email: 'patient@garudahacks.com',
-            full_name: 'Budi Pasien',
-            role: Role.PASIEN,
+            full_name: 'Budi Patient',
+            role: Role.PATIENT,
         },
     });
 
@@ -39,7 +39,7 @@ async function main() {
             patient_id: patient.id,
             psychiatrist_id: dr.id,
             name: 'Lithium (Mood Stabilizer)',
-            dosage_and_freq: '300mg - Malam',
+            dosage_and_freq: '300mg - Night',
             is_active: true,
         },
     });
@@ -53,9 +53,9 @@ async function main() {
             data: {
                 patient_id: patient.id,
                 mood_score: Math.floor(Math.random() * 5) + 1,
-                triggers: ['Stress tugas', 'Kurang tidur'],
+                triggers: ['Work stress', 'Lack of sleep'],
                 urge_intensity: Math.floor(Math.random() * 5) + 1,
-                coping_journal: 'Mencoba latihan pernapasan.',
+                coping_journal: 'Trying breathing exercises.',
                 created_at: logDate,
             },
         });

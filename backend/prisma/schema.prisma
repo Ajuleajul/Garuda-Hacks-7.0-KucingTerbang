@@ -9,8 +9,8 @@ datasource db {
 }
 
 enum Role {
-  PASIEN
-  PSIKIATER
+  PATIENT
+  PSYCHIATRIST
 }
 
 model User {

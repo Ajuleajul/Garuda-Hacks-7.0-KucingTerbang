@@ -1,5 +1,5 @@
 -- CreateEnum
-CREATE TYPE "Role" AS ENUM ('PASIEN', 'PSIKIATER');
+CREATE TYPE "Role" AS ENUM ('PATIENT', 'PSYCHIATRIST');
 
 -- CreateEnum
 CREATE TYPE "LinkStatus" AS ENUM ('PENDING', 'ACTIVE');
