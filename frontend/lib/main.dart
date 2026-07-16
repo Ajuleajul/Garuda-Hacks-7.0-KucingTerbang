@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'pages/patient/AuthPage.dart';
 import 'theme/curamind_theme.dart';
+import 'animated_cursor.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +26,9 @@ class CuramindApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: buildCuramindTheme(),
       home: const AuthPage(),
+      builder: (context, child) {
+        return AnimatedCustomCursor(child: child!);
+      },
     );
   }
 }

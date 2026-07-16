@@ -108,12 +108,16 @@ ThemeData buildCuramindTheme() {
           fontSize: 16,
           fontWeight: FontWeight.w600,
         ),
+      ).copyWith(
+        mouseCursor: WidgetStateProperty.all(SystemMouseCursors.none),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: CuramindColors.ocean,
         textStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+      ).copyWith(
+        mouseCursor: WidgetStateProperty.all(SystemMouseCursors.none),
       ),
     ),
   );

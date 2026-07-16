@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import '../../theme/curamind_theme.dart';
 import '../psychiatrist/ClinicianLoginPage.dart';
 import 'ProfilePage.dart';
+import '../../animated_cursor.dart';
 
 enum AuthMode { login, register }
 
@@ -338,36 +339,40 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
                                       : const SizedBox.shrink(),
                                 ),
                                 const SizedBox(height: 24),
-                                FilledButton(
-                                  onPressed: _loading ? null : _submit,
-                                  child: _loading
-                                      ? const SizedBox(
-                                          height: 22,
-                                          width: 22,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2.4,
-                                            color: CuramindColors.white,
+                                CursorHoverRegion(
+                                  child: FilledButton(
+                                    onPressed: _loading ? null : _submit,
+                                    child: _loading
+                                        ? const SizedBox(
+                                            height: 22,
+                                            width: 22,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.4,
+                                              color: CuramindColors.white,
+                                            ),
+                                          )
+                                        : Text(
+                                            isRegister
+                                                ? 'Create account'
+                                                : 'Sign in',
                                           ),
-                                        )
-                                      : Text(
-                                          isRegister
-                                              ? 'Create account'
-                                              : 'Sign in',
-                                        ),
+                                  ),
                                 ),
                                 const SizedBox(height: 12),
-                                TextButton(
-                                  onPressed: _loading
-                                      ? null
-                                      : () => _switchMode(
-                                            isRegister
-                                                ? AuthMode.login
-                                                : AuthMode.register,
-                                          ),
-                                  child: Text(
-                                    isRegister
-                                        ? 'Already have an account? Sign in'
-                                        : 'New here? Create an account',
+                                CursorHoverRegion(
+                                  child: TextButton(
+                                    onPressed: _loading
+                                        ? null
+                                        : () => _switchMode(
+                                              isRegister
+                                                  ? AuthMode.login
+                                                  : AuthMode.register,
+                                            ),
+                                    child: Text(
+                                      isRegister
+                                          ? 'Already have an account? Sign in'
+                                          : 'New here? Create an account',
+                                    ),
                                   ),
                                 ),
                               ],
@@ -570,19 +575,21 @@ class _ToggleChip extends StatelessWidget {
       ),
       child: Material(
         color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(11),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(
-                fontWeight: FontWeight.w600,
-                color: selected
-                    ? CuramindColors.white
-                    : CuramindColors.inkMuted,
+        child: CursorHoverRegion(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(11),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.w600,
+                  color: selected
+                      ? CuramindColors.white
+                      : CuramindColors.inkMuted,
+                ),
               ),
             ),
           ),
@@ -675,38 +682,40 @@ class _RoleCard extends StatelessWidget {
       ),
       child: Material(
         color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  icon,
-                  size: 22,
-                  color: selected
-                      ? CuramindColors.sageDeep
-                      : CuramindColors.inkMuted,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  title,
-                  style: GoogleFonts.outfit(
-                    fontWeight: FontWeight.w700,
-                    color: CuramindColors.ink,
+        child: CursorHoverRegion(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    icon,
+                    size: 22,
+                    color: selected
+                        ? CuramindColors.sageDeep
+                        : CuramindColors.inkMuted,
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    color: CuramindColors.inkMuted,
+                  const SizedBox(height: 8),
+                  Text(
+                    title,
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.w700,
+                      color: CuramindColors.ink,
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: CuramindColors.inkMuted,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
