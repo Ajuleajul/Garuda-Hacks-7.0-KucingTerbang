@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../pages/patient/AuthPage.dart';
 import '../pages/patient/ClinicianLinkPage.dart';
+import '../pages/patient/DistressKitPage.dart';
 import '../pages/patient/EMADiaryPage.dart';
 import '../pages/patient/ProfilePage.dart';
 import '../theme/curamind_theme.dart';
@@ -56,11 +57,7 @@ class _PatientShellState extends State<PatientShell> {
         subtitle: 'Reminders and adherence logging coming next.',
         icon: Icons.medication_outlined,
       ),
-      const ComingSoonPage(
-        title: 'Distress Kit',
-        subtitle: 'Breathing, grounding, and safety plan coming next.',
-        icon: Icons.self_improvement_outlined,
-      ),
+      const DistressKitPage(embedded: true),
       const ComingSoonPage(
         title: 'Personal Dashboard',
         subtitle: 'Dual mood × adherence chart coming next.',
