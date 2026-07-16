@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/auth_service.dart';
 import '../../theme/curamind_theme.dart';
-import 'AuthPage.dart';
+import 'AuthGate.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({
@@ -90,7 +90,7 @@ class _ProfilePageState extends State<ProfilePage> {
         pageBuilder: (context, animation, secondaryAnimation) {
           return FadeTransition(
             opacity: animation,
-            child: const AuthPage(),
+            child: const AuthGate(),
           );
         },
       ),

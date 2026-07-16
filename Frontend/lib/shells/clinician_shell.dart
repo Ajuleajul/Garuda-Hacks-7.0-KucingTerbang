@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../pages/psychiatrist/ClinicianLoginPage.dart';
+import '../pages/patient/AuthGate.dart';
 import '../pages/psychiatrist/PatientMonitoringDashboard.dart';
 import '../pages/psychiatrist/ProfilePage.dart';
 import '../pages/psychiatrist/DualBivariateDashboard.dart';
@@ -8,7 +8,6 @@ import '../pages/psychiatrist/MedicationPrescriptionInputPage.dart';
 import '../pages/psychiatrist/MedicationManagementPage.dart';
 import '../pages/psychiatrist/ExportClinicalReportPage.dart';
 import '../theme/curamind_theme.dart';
-import '../widgets/coming_soon_page.dart';
 import '../widgets/curamind_app_header.dart';
 
 class ClinicianShell extends StatefulWidget {
@@ -42,7 +41,7 @@ class _ClinicianShellState extends State<ClinicianShell> {
 
   void _signOut() {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const ClinicianLoginPage()),
+      MaterialPageRoute<void>(builder: (_) => const AuthGate()),
       (_) => false,
     );
   }

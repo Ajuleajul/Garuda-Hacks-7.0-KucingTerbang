@@ -3,10 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../animated_cursor.dart';
 import '../../services/auth_service.dart';
-import '../../shells/clinician_shell.dart';
 import '../../theme/curamind_theme.dart';
 import '../auth/EmailVerificationPage.dart';
 import '../auth/ForgotPasswordPage.dart';
+import '../patient/AuthGate.dart';
 import '../patient/AuthPage.dart';
 
 enum ClinicianAuthMode { login, register }
@@ -168,20 +168,9 @@ class _ClinicianLoginPageState extends State<ClinicianLoginPage>
   }
 
   void _enterApp(AuthResult result) {
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder<void>(
-        transitionDuration: const Duration(milliseconds: 420),
-        pageBuilder: (context, animation, secondaryAnimation) {
-          return FadeTransition(
-            opacity: animation,
-            child: ClinicianShell(
-              displayName: result.user.fullName.isEmpty
-                  ? 'Clinician'
-                  : result.user.fullName,
-            ),
-          );
-        },
-      ),
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const AuthGate()),
+      (_) => false,
     );
   }
 

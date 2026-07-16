@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../pages/patient/AuthPage.dart';
+import '../pages/patient/AuthGate.dart';
 import '../pages/patient/ClinicianLinkPage.dart';
 import '../pages/patient/DistressKitPage.dart';
 import '../pages/patient/EMADiaryPage.dart';
@@ -43,7 +43,7 @@ class _PatientShellState extends State<PatientShell> {
 
   void _signOut() {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const AuthPage()),
+      MaterialPageRoute<void>(builder: (_) => const AuthGate()),
       (_) => false,
     );
   }

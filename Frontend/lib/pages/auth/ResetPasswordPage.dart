@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../animated_cursor.dart';
 import '../../services/auth_service.dart';
 import '../../theme/curamind_theme.dart';
-import '../patient/AuthPage.dart';
+import '../patient/AuthGate.dart';
 
 /// Opened after the user taps the password-reset link
 /// ([AuthChangeEvent.passwordRecovery]).
@@ -38,6 +38,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     setState(() => _loading = true);
     try {
       await AuthService.instance.updatePassword(_passwordController.text);
+      await AuthService.instance.logout();
       if (!mounted) return;
       setState(() => _done = true);
     } on AuthFailure catch (e) {
@@ -59,7 +60,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
 
   void _goSignIn() {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const AuthPage()),
+      MaterialPageRoute<void>(builder: (_) => const AuthGate()),
       (_) => false,
     );
   }

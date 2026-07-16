@@ -1,12 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'pages/auth/ResetPasswordPage.dart';
-import 'pages/patient/AuthPage.dart';
+import 'pages/patient/AuthGate.dart';
 import 'theme/curamind_theme.dart';
 import 'animated_cursor.dart';
 
@@ -43,39 +40,8 @@ Future<void> main() async {
   runApp(const CuramindApp());
 }
 
-class CuramindApp extends StatefulWidget {
+class CuramindApp extends StatelessWidget {
   const CuramindApp({super.key});
-
-  @override
-  State<CuramindApp> createState() => _CuramindAppState();
-}
-
-class _CuramindAppState extends State<CuramindApp> {
-  StreamSubscription<AuthState>? _authSub;
-
-  @override
-  void initState() {
-    super.initState();
-    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-      final event = data.event;
-      if (event == AuthChangeEvent.passwordRecovery) {
-        final nav = curamindNavigatorKey.currentState;
-        if (nav == null) return;
-        nav.pushAndRemoveUntil(
-          MaterialPageRoute<void>(
-            builder: (_) => const ResetPasswordPage(),
-          ),
-          (route) => false,
-        );
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _authSub?.cancel();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +50,7 @@ class _CuramindAppState extends State<CuramindApp> {
       debugShowCheckedModeBanner: false,
       navigatorKey: curamindNavigatorKey,
       theme: buildCuramindTheme(),
-      home: const AuthPage(),
+      home: const AuthGate(),
       builder: (context, child) {
         return AnimatedCustomCursor(child: child!);
       },

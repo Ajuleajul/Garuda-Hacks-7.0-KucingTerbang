@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/auth_service.dart';
-import '../../shells/patient_shell.dart';
 import '../../theme/curamind_theme.dart';
 import '../auth/EmailVerificationPage.dart';
 import '../auth/ForgotPasswordPage.dart';
 import '../psychiatrist/ClinicianLoginPage.dart';
 import '../../animated_cursor.dart';
+import 'AuthGate.dart';
 
 enum AuthMode { login, register }
 
@@ -159,20 +159,9 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
   }
 
   void _enterApp(AuthResult result) {
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder<void>(
-        transitionDuration: const Duration(milliseconds: 420),
-        pageBuilder: (context, animation, secondaryAnimation) {
-          return FadeTransition(
-            opacity: animation,
-            child: PatientShell(
-              displayName: result.user.fullName.isEmpty
-                  ? 'Patient'
-                  : result.user.fullName,
-            ),
-          );
-        },
-      ),
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const AuthGate()),
+      (_) => false,
     );
   }
 
