@@ -329,16 +329,18 @@ class _ClinicianLoginPageState extends State<ClinicianLoginPage>
                                   decoration: InputDecoration(
                                     labelText: 'Password',
                                     hintText: 'At least 6 characters',
-                                    suffixIcon: IconButton(
-                                      onPressed: () => setState(
-                                        () => _obscurePassword =
-                                            !_obscurePassword,
-                                      ),
-                                      icon: Icon(
-                                        _obscurePassword
-                                            ? Icons.visibility_outlined
-                                            : Icons.visibility_off_outlined,
-                                        color: CuramindColors.inkMuted,
+                                    suffixIcon: CursorHoverRegion(
+                                      child: IconButton(
+                                        onPressed: () => setState(
+                                          () => _obscurePassword =
+                                              !_obscurePassword,
+                                        ),
+                                        icon: Icon(
+                                          _obscurePassword
+                                              ? Icons.visibility_outlined
+                                              : Icons.visibility_off_outlined,
+                                          color: CuramindColors.inkMuted,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -370,19 +372,21 @@ class _ClinicianLoginPageState extends State<ClinicianLoginPage>
                                               labelText:
                                                   'Confirm password',
                                               hintText: 'Re-enter password',
-                                              suffixIcon: IconButton(
-                                                onPressed: () => setState(
-                                                  () => _obscureConfirm =
-                                                      !_obscureConfirm,
-                                                ),
-                                                icon: Icon(
-                                                  _obscureConfirm
-                                                      ? Icons
-                                                          .visibility_outlined
-                                                      : Icons
-                                                          .visibility_off_outlined,
-                                                  color: CuramindColors
-                                                      .inkMuted,
+                                              suffixIcon: CursorHoverRegion(
+                                                child: IconButton(
+                                                  onPressed: () => setState(
+                                                    () => _obscureConfirm =
+                                                        !_obscureConfirm,
+                                                  ),
+                                                  icon: Icon(
+                                                    _obscureConfirm
+                                                        ? Icons
+                                                            .visibility_outlined
+                                                        : Icons
+                                                            .visibility_off_outlined,
+                                                    color: CuramindColors
+                                                        .inkMuted,
+                                                  ),
                                                 ),
                                               ),
                                             ),
