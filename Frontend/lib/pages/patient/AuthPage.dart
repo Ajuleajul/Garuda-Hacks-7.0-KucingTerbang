@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../theme/curamind_theme.dart';
+import '../psychiatrist/ClinicianLoginPage.dart';
 
 enum AuthMode { login, register }
 
@@ -78,16 +79,14 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
     if (!mounted) return;
     setState(() => _loading = false);
 
-    final roleLabel =
-        _role == UserRole.patient ? 'Pasien' : 'Psikiater';
-    final action = _mode == AuthMode.login ? 'Masuk' : 'Daftar';
+    final action = _mode == AuthMode.login ? 'Signed in' : 'Registered';
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
         backgroundColor: CuramindColors.sageDeep,
         content: Text(
-          '$action berhasil sebagai $roleLabel (demo, tanpa backend).',
+          '$action successfully as Patient (demo, no backend).',
           style: GoogleFonts.outfit(color: CuramindColors.white),
         ),
       ),
@@ -103,14 +102,33 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
         pageBuilder: (context, animation, secondaryAnimation) {
           return FadeTransition(
             opacity: animation,
-            child: _AuthSuccessPlaceholder(
-              name: displayName,
-              role: _role,
-            ),
+            child: _AuthSuccessPlaceholder(name: displayName),
           );
         },
       ),
     );
+  }
+
+  void _openClinicianLogin() {
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 360),
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return FadeTransition(
+            opacity: animation,
+            child: const ClinicianLoginPage(),
+          );
+        },
+      ),
+    );
+  }
+
+  void _onRoleChanged(UserRole role) {
+    if (role == UserRole.psychiatrist) {
+      _openClinicianLogin();
+      return;
+    }
+    setState(() => _role = role);
   }
 
   @override
@@ -158,7 +176,7 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
                               children: [
                                 _RolePicker(
                                   role: _role,
-                                  onChanged: (r) => setState(() => _role = r),
+                                  onChanged: _onRoleChanged,
                                 ),
                                 const SizedBox(height: 18),
                                 AnimatedSize(
@@ -176,14 +194,14 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
                                             textInputAction:
                                                 TextInputAction.next,
                                             decoration: const InputDecoration(
-                                              labelText: 'Nama lengkap',
-                                              hintText: 'Nama yang dipakai',
+                                              labelText: 'Full name',
+                                              hintText: 'Name as shown in app',
                                             ),
                                             validator: (v) {
                                               if (!isRegister) return null;
                                               if (v == null ||
                                                   v.trim().length < 2) {
-                                                return 'Masukkan nama lengkap';
+                                                return 'Enter your full name';
                                               }
                                               return null;
                                             },
@@ -198,16 +216,16 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
                                   autocorrect: false,
                                   decoration: const InputDecoration(
                                     labelText: 'Email',
-                                    hintText: 'nama@email.com',
+                                    hintText: 'name@email.com',
                                   ),
                                   validator: (v) {
                                     final value = v?.trim() ?? '';
                                     if (value.isEmpty) {
-                                      return 'Email wajib diisi';
+                                      return 'Email is required';
                                     }
                                     if (!value.contains('@') ||
                                         !value.contains('.')) {
-                                      return 'Format email tidak valid';
+                                      return 'Enter a valid email';
                                     }
                                     return null;
                                   },
@@ -223,7 +241,7 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
                                       isRegister ? null : (_) => _submit(),
                                   decoration: InputDecoration(
                                     labelText: 'Password',
-                                    hintText: 'Minimal 6 karakter',
+                                    hintText: 'At least 6 characters',
                                     suffixIcon: IconButton(
                                       onPressed: () => setState(
                                         () => _obscurePassword =
@@ -239,7 +257,7 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
                                   ),
                                   validator: (v) {
                                     if (v == null || v.length < 6) {
-                                      return 'Password minimal 6 karakter';
+                                      return 'Password must be at least 6 characters';
                                     }
                                     return null;
                                   },
@@ -259,8 +277,8 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
                                                 TextInputAction.done,
                                             onFieldSubmitted: (_) => _submit(),
                                             decoration: InputDecoration(
-                                              labelText: 'Konfirmasi password',
-                                              hintText: 'Ulangi password',
+                                              labelText: 'Confirm password',
+                                              hintText: 'Re-enter password',
                                               suffixIcon: IconButton(
                                                 onPressed: () => setState(
                                                   () => _obscureConfirm =
@@ -281,7 +299,7 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
                                               if (!isRegister) return null;
                                               if (v !=
                                                   _passwordController.text) {
-                                                return 'Password tidak cocok';
+                                                return 'Passwords do not match';
                                               }
                                               return null;
                                             },
@@ -303,8 +321,8 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
                                         )
                                       : Text(
                                           isRegister
-                                              ? 'Buat akun'
-                                              : 'Masuk',
+                                              ? 'Create account'
+                                              : 'Sign in',
                                         ),
                                 ),
                                 const SizedBox(height: 12),
@@ -318,8 +336,8 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
                                           ),
                                   child: Text(
                                     isRegister
-                                        ? 'Sudah punya akun? Masuk'
-                                        : 'Belum punya akun? Daftar',
+                                        ? 'Already have an account? Sign in'
+                                        : 'New here? Create an account',
                                   ),
                                 ),
                               ],
@@ -328,8 +346,8 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
                         ),
                         const SizedBox(height: 20),
                         Text(
-                          'Curamind bukan pengganti layanan darurat. '
-                          'Jika dalam krisis, hubungi bantuan profesional setempat.',
+                          'Curamind is not a substitute for emergency services. '
+                          'If you are in crisis, contact local professional help.',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.outfit(
                             fontSize: 12,
@@ -444,8 +462,8 @@ class _BrandHeader extends StatelessWidget {
           duration: const Duration(milliseconds: 280),
           child: Text(
             isRegister
-                ? 'Buat akun untuk mulai mendampingi perjalanan harianmu.'
-                : 'Pendamping klinis yang tenang untuk pasien & psikiater.',
+                ? 'Create an account to start tracking your daily journey.'
+                : 'A calm clinical companion for patients & psychiatrists.',
             key: ValueKey(isRegister),
             textAlign: TextAlign.center,
             style: GoogleFonts.outfit(
@@ -482,14 +500,14 @@ class _ModeToggle extends StatelessWidget {
         children: [
           Expanded(
             child: _ToggleChip(
-              label: 'Masuk',
+              label: 'Sign in',
               selected: mode == AuthMode.login,
               onTap: () => onChanged(AuthMode.login),
             ),
           ),
           Expanded(
             child: _ToggleChip(
-              label: 'Daftar',
+              label: 'Register',
               selected: mode == AuthMode.register,
               onTap: () => onChanged(AuthMode.register),
             ),
@@ -559,7 +577,7 @@ class _RolePicker extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Masuk sebagai',
+          'Continue as',
           style: GoogleFonts.outfit(
             fontSize: 13,
             fontWeight: FontWeight.w600,
@@ -571,8 +589,8 @@ class _RolePicker extends StatelessWidget {
           children: [
             Expanded(
               child: _RoleCard(
-                title: 'Pasien',
-                subtitle: 'Diary & kepatuhan',
+                title: 'Patient',
+                subtitle: 'Diary & adherence',
                 icon: Icons.favorite_outline_rounded,
                 selected: role == UserRole.patient,
                 onTap: () => onChanged(UserRole.patient),
@@ -581,8 +599,8 @@ class _RolePicker extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: _RoleCard(
-                title: 'Psikiater',
-                subtitle: 'Monitoring klinik',
+                title: 'Psychiatrist',
+                subtitle: 'Clinic monitoring',
                 icon: Icons.medical_services_outlined,
                 selected: role == UserRole.psychiatrist,
                 onTap: () => onChanged(UserRole.psychiatrist),
@@ -668,19 +686,12 @@ class _RoleCard extends StatelessWidget {
 }
 
 class _AuthSuccessPlaceholder extends StatelessWidget {
-  const _AuthSuccessPlaceholder({
-    required this.name,
-    required this.role,
-  });
+  const _AuthSuccessPlaceholder({required this.name});
 
   final String name;
-  final UserRole role;
 
   @override
   Widget build(BuildContext context) {
-    final roleLabel =
-        role == UserRole.patient ? 'Pasien' : 'Psikiater';
-
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
@@ -703,7 +714,7 @@ class _AuthSuccessPlaceholder extends StatelessWidget {
                         );
                       },
                       icon: const Icon(Icons.arrow_back_rounded),
-                      label: const Text('Keluar'),
+                      label: const Text('Sign out'),
                     ),
                   ),
                   const Spacer(),
@@ -718,7 +729,7 @@ class _AuthSuccessPlaceholder extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Halo, $name',
+                    'Hello, $name',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.outfit(
                       fontSize: 22,
@@ -728,8 +739,8 @@ class _AuthSuccessPlaceholder extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Kamu masuk sebagai $roleLabel.\n'
-                    'Shell beranda per-role menyusul.',
+                    'You are signed in as a Patient.\n'
+                    'Home shell coming next.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.outfit(
                       fontSize: 15,

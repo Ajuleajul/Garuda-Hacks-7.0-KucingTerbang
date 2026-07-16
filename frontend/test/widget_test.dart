@@ -10,7 +10,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Curamind'), findsOneWidget);
-    expect(find.text('Masuk'), findsWidgets);
-    expect(find.text('Daftar'), findsOneWidget);
+    expect(find.text('Sign in'), findsWidgets);
+    expect(find.text('Register'), findsOneWidget);
   });
 }
