@@ -1,11 +1,7 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -24,7 +20,14 @@ model User {
   role       Role
   created_at DateTime @default(now())
 
-  mood_logs  MoodLog[] 
+  mood_logs                     MoodLog[] 
+  patient_links                 PatientPsychiatristLink[] @relation("PatientLinks")
+  psychiatrist_links            PatientPsychiatristLink[] @relation("PsychiatristLinks")
+  patient_medications           Medication[]              @relation("PatientMedications")
+  psychiatrist_prescriptions    Medication[]              @relation("PsychiatristPrescriptions")
+  medication_logs               MedicationLog[]           @relation("PatientMedicationLogs")
+  patient_notes                 SessionNote[]             @relation("PatientSessionNotes")
+  psychiatrist_notes            SessionNote[]             @relation("PsychiatristSessionNotes")
 }
 
 model MoodLog {
@@ -36,4 +39,62 @@ model MoodLog {
   urge_intensity Int
   coping_journal String?
   created_at     DateTime @default(now())
+}
+
+enum LinkStatus {
+  PENDING
+  ACTIVE
+}
+
+enum LogStatus {
+  TAKEN
+  MISSED
+}
+
+model PatientPsychiatristLink {
+  id              String     @id @default(uuid())
+  patient_id      String
+  psychiatrist_id String
+  status          LinkStatus @default(PENDING)
+  created_at      DateTime   @default(now())
+
+  patient         User       @relation("PatientLinks", fields: [patient_id], references: [id])
+  psychiatrist    User       @relation("PsychiatristLinks", fields: [psychiatrist_id], references: [id])
+}
+
+model Medication {
+  id              String     @id @default(uuid())
+  patient_id      String
+  psychiatrist_id String
+  name            String
+  dosage_and_freq String
+  is_active       Boolean    @default(true)
+  created_at      DateTime   @default(now())
+
+  patient         User       @relation("PatientMedications", fields: [patient_id], references: [id])
+  psychiatrist    User       @relation("PsychiatristPrescriptions", fields: [psychiatrist_id], references: [id])
+  
+  logs            MedicationLog[]
+}
+
+model MedicationLog {
+  id              String     @id @default(uuid())
+  medication_id   String
+  patient_id      String
+  status          LogStatus
+  logged_at       DateTime   @default(now())
+
+  medication      Medication @relation(fields: [medication_id], references: [id])
+  patient         User       @relation("PatientMedicationLogs", fields: [patient_id], references: [id])
+}
+
+model SessionNote {
+  id              String     @id @default(uuid())
+  patient_id      String
+  psychiatrist_id String
+  clinical_notes  String
+  created_at      DateTime   @default(now())
+
+  patient         User       @relation("PatientSessionNotes", fields: [patient_id], references: [id])
+  psychiatrist    User       @relation("PsychiatristSessionNotes", fields: [psychiatrist_id], references: [id])
 }
