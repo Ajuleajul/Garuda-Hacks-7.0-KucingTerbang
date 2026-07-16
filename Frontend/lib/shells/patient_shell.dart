@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../pages/patient/AuthPage.dart';
+import '../pages/patient/ClinicianLinkPage.dart';
 import '../pages/patient/ProfilePage.dart';
 import '../theme/curamind_theme.dart';
 import '../widgets/coming_soon_page.dart';
@@ -68,11 +69,7 @@ class _PatientShellState extends State<PatientShell> {
         subtitle: 'Dual mood × adherence chart coming next.',
         icon: Icons.show_chart_outlined,
       ),
-      const ComingSoonPage(
-        title: 'Clinician Link',
-        subtitle: 'Connect with your psychiatrist coming next.',
-        icon: Icons.link_outlined,
-      ),
+      const ClinicianLinkPage(embedded: true),
       ProfilePage(
         name: widget.displayName,
         role: 'Patient',
