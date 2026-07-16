@@ -2,17 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 abstract final class CuramindColors {
-  static const sage = Color(0xFF5B7C6A);
-  static const sageDeep = Color(0xFF3F5A4C);
-  static const sageSoft = Color(0xFFD8E6DE);
-  static const mist = Color(0xFFE8F0EB);
-  static const ink = Color(0xFF1C2B24);
-  static const inkMuted = Color(0xFF5A6B62);
-  static const coral = Color(0xFFD4735E);
-  static const coralSoft = Color(0xFFF3DED8);
-  static const surface = Color(0xFFF7FAF8);
+  static const sage = Color(0xFF5A7D6E);
+  static const sageDeep = Color(0xFF3D5A4E);
+  static const sageSoft = Color(0xFFD5E5DC);
+
+  static const slate = Color(0xFF6B8499);
+  static const ocean = Color(0xFF4A6678);
+  static const mistBlue = Color(0xFFD9E4EC);
+
+  static const mist = Color(0xFFE6EEF0);
+  static const surface = Color(0xFFF4F8F9);
   static const white = Color(0xFFFFFFFF);
-  static const danger = Color(0xFFB54A3C);
+
+  static const ink = Color(0xFF1A2830);
+  static const inkMuted = Color(0xFF5A6B72);
+
+  static const danger = Color(0xFF8F7A7A);
 }
 
 ThemeData buildCuramindTheme() {
@@ -22,11 +27,19 @@ ThemeData buildCuramindTheme() {
     colorScheme: ColorScheme.light(
       primary: CuramindColors.sage,
       onPrimary: CuramindColors.white,
-      secondary: CuramindColors.coral,
+      primaryContainer: CuramindColors.sageSoft,
+      onPrimaryContainer: CuramindColors.sageDeep,
+      secondary: CuramindColors.slate,
       onSecondary: CuramindColors.white,
+      secondaryContainer: CuramindColors.mistBlue,
+      onSecondaryContainer: CuramindColors.ocean,
       surface: CuramindColors.surface,
       onSurface: CuramindColors.ink,
+      onSurfaceVariant: CuramindColors.inkMuted,
+      outline: CuramindColors.sageSoft,
+      outlineVariant: CuramindColors.mistBlue,
       error: CuramindColors.danger,
+      onError: CuramindColors.white,
     ),
     scaffoldBackgroundColor: CuramindColors.mist,
   );
@@ -49,7 +62,7 @@ ThemeData buildCuramindTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: CuramindColors.white.withValues(alpha: 0.72),
+      fillColor: CuramindColors.white.withValues(alpha: 0.78),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       hintStyle: GoogleFonts.outfit(
         color: CuramindColors.inkMuted,
@@ -59,17 +72,22 @@ ThemeData buildCuramindTheme() {
         color: CuramindColors.inkMuted,
         fontWeight: FontWeight.w500,
       ),
+      errorStyle: GoogleFonts.outfit(
+        color: CuramindColors.danger,
+        fontWeight: FontWeight.w500,
+        fontSize: 12,
+      ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: CuramindColors.sageSoft),
+        borderSide: const BorderSide(color: CuramindColors.mistBlue),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: CuramindColors.sageSoft),
+        borderSide: const BorderSide(color: CuramindColors.mistBlue),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: CuramindColors.sage, width: 1.6),
+        borderSide: const BorderSide(color: CuramindColors.slate, width: 1.6),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -77,7 +95,7 @@ ThemeData buildCuramindTheme() {
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: CuramindColors.danger, width: 1.6),
+        borderSide: const BorderSide(color: CuramindColors.danger, width: 1.4),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
@@ -94,7 +112,7 @@ ThemeData buildCuramindTheme() {
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: CuramindColors.sageDeep,
+        foregroundColor: CuramindColors.ocean,
         textStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600),
       ),
     ),

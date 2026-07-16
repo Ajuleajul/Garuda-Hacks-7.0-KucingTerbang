@@ -379,9 +379,9 @@ class _AuthAtmosphere extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color(0xFFEAF3EE),
-            Color(0xFFF3E9E4),
-            Color(0xFFE4EDE8),
+            Color(0xFFE6EEF0),
+            Color(0xFFE8F0EC),
+            Color(0xFFDDE8EB),
           ],
           stops: [0.0, 0.55, 1.0],
         ),
@@ -401,7 +401,7 @@ class _AuthAtmosphere extends StatelessWidget {
             left: -50,
             child: _Blob(
               size: 260,
-              color: CuramindColors.coral.withValues(alpha: 0.12),
+              color: CuramindColors.slate.withValues(alpha: 0.12),
             ),
           ),
           Positioned(
@@ -409,7 +409,7 @@ class _AuthAtmosphere extends StatelessWidget {
             left: -30,
             child: _Blob(
               size: 120,
-              color: CuramindColors.sageSoft.withValues(alpha: 0.55),
+              color: CuramindColors.mistBlue.withValues(alpha: 0.65),
             ),
           ),
         ],
