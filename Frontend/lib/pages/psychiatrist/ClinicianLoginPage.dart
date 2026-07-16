@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../animated_cursor.dart';
 import '../../services/auth_service.dart';
 import '../../shells/clinician_shell.dart';
 import '../../theme/curamind_theme.dart';
@@ -172,10 +173,12 @@ class _ClinicianLoginPageState extends State<ClinicianLoginPage>
                       children: [
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: TextButton.icon(
-                            onPressed: _loading ? null : _goToPatientAuth,
-                            icon: const Icon(Icons.arrow_back_rounded),
-                            label: const Text('Back to patient'),
+                          child: CursorHoverRegion(
+                            child: TextButton.icon(
+                              onPressed: _loading ? null : _goToPatientAuth,
+                              icon: const Icon(Icons.arrow_back_rounded),
+                              label: const Text('Back to patient'),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -397,37 +400,41 @@ class _ClinicianLoginPageState extends State<ClinicianLoginPage>
                                       : const SizedBox.shrink(),
                                 ),
                                 const SizedBox(height: 24),
-                                FilledButton(
-                                  onPressed: _loading ? null : _submit,
-                                  child: _loading
-                                      ? const SizedBox(
-                                          height: 22,
-                                          width: 22,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2.4,
-                                            color: CuramindColors.white,
+                                CursorHoverRegion(
+                                  child: FilledButton(
+                                    onPressed: _loading ? null : _submit,
+                                    child: _loading
+                                        ? const SizedBox(
+                                            height: 22,
+                                            width: 22,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.4,
+                                              color: CuramindColors.white,
+                                            ),
+                                          )
+                                        : Text(
+                                            isRegister
+                                                ? 'Create psychiatrist account'
+                                                : 'Sign in to clinic',
                                           ),
-                                        )
-                                      : Text(
-                                          isRegister
-                                              ? 'Create psychiatrist account'
-                                              : 'Sign in to clinic',
-                                        ),
+                                  ),
                                 ),
                                 const SizedBox(height: 12),
-                                TextButton(
-                                  onPressed: _loading
-                                      ? null
-                                      : () => _switchMode(
-                                            isRegister
-                                                ? ClinicianAuthMode.login
-                                                : ClinicianAuthMode
-                                                    .register,
-                                          ),
-                                  child: Text(
-                                    isRegister
-                                        ? 'Already have a clinic account? Sign in'
-                                        : 'New here? Register as a psychiatrist',
+                                CursorHoverRegion(
+                                  child: TextButton(
+                                    onPressed: _loading
+                                        ? null
+                                        : () => _switchMode(
+                                              isRegister
+                                                  ? ClinicianAuthMode.login
+                                                  : ClinicianAuthMode
+                                                      .register,
+                                            ),
+                                    child: Text(
+                                      isRegister
+                                          ? 'Already have a clinic account? Sign in'
+                                          : 'New here? Register as a psychiatrist',
+                                    ),
                                   ),
                                 ),
                               ],
@@ -480,19 +487,21 @@ class _ModeChip extends StatelessWidget {
       ),
       child: Material(
         color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(11),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(
-                fontWeight: FontWeight.w600,
-                color: selected
-                    ? CuramindColors.white
-                    : CuramindColors.inkMuted,
+        child: CursorHoverRegion(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(11),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.w600,
+                  color: selected
+                      ? CuramindColors.white
+                      : CuramindColors.inkMuted,
+                ),
               ),
             ),
           ),

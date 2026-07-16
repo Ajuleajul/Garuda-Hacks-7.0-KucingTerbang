@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../pages/psychiatrist/ClinicianLoginPage.dart';
 import '../pages/psychiatrist/ProfilePage.dart';
+import '../pages/psychiatrist/PatientMonitoringDashboard.dart';
 import '../theme/curamind_theme.dart';
 import '../widgets/coming_soon_page.dart';
 import '../widgets/curamind_app_header.dart';
@@ -47,7 +48,7 @@ class _ClinicianShellState extends State<ClinicianShell> {
     _index =
         widget.initialIndex.clamp(0, ClinicianShell.destinations.length - 1);
     _pages = [
-      _ClinicianHomeBody(name: widget.displayName),
+      const PatientMonitoringDashboard(),
       const ComingSoonPage(
         title: 'Dual-Correlation',
         subtitle: 'Mood × adherence detail chart for a selected patient.',
