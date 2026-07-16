@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../theme/curamind_theme.dart';
+import 'DistressCrisisSOSPage.dart';
 
 class DistressKitPage extends StatefulWidget {
   const DistressKitPage({
@@ -243,8 +244,7 @@ class _DistressKitPageState extends State<DistressKitPage>
                 saferEnvironment: _saferEnvironment,
                 reasonsForLiving: _reasonsForLiving,
                 onOpenSos: () {
-                  setState(() => _section = 3);
-                  _tabController.animateTo(3);
+                  DistressCrisisSOSPage.open(context);
                 },
               ),
               _KitAndSosTab(
@@ -258,6 +258,7 @@ class _DistressKitPageState extends State<DistressKitPage>
                   });
                 },
                 onRemoveKit: (i) => setState(() => _kitItems.removeAt(i)),
+                onOpenCrisisMode: () => DistressCrisisSOSPage.open(context),
               ),
             ],
           ),
@@ -807,6 +808,7 @@ class _KitAndSosTab extends StatelessWidget {
     required this.onAdd,
     required this.onToggleKit,
     required this.onRemoveKit,
+    required this.onOpenCrisisMode,
   });
 
   final List<_KitItem> kitItems;
@@ -814,6 +816,7 @@ class _KitAndSosTab extends StatelessWidget {
   final VoidCallback onAdd;
   final ValueChanged<int> onToggleKit;
   final ValueChanged<int> onRemoveKit;
+  final VoidCallback onOpenCrisisMode;
 
   @override
   Widget build(BuildContext context) {
@@ -926,11 +929,22 @@ class _KitAndSosTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Curamind is not emergency care. If you are in immediate danger, contact local emergency services now.',
+                  'Curamind is not emergency care. If distress is extreme, open calm crisis mode first — it will not dial for you.',
                   style: GoogleFonts.outfit(
                     fontSize: 13,
                     height: 1.45,
                     color: CuramindColors.inkMuted,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  onPressed: onOpenCrisisMode,
+                  icon: const Icon(Icons.sos_outlined),
+                  label: const Text('Open crisis mode'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: CuramindColors.ocean,
+                    foregroundColor: CuramindColors.white,
+                    minimumSize: const Size.fromHeight(50),
                   ),
                 ),
                 const SizedBox(height: 14),
