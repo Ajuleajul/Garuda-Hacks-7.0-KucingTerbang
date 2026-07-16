@@ -1,16 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../pages/psychiatrist/ClinicianLoginPage.dart';
-import '../pages/psychiatrist/HomePage.dart';
 import '../pages/psychiatrist/PatientMonitoringDashboard.dart';
-<<<<<<< Updated upstream
 import '../pages/psychiatrist/ProfilePage.dart';
-=======
 import '../pages/psychiatrist/DualBivariateDashboard.dart';
 import '../pages/psychiatrist/MedicationPrescriptionInputPage.dart';
 import '../pages/psychiatrist/MedicationManagementPage.dart';
 import '../pages/psychiatrist/ExportClinicalReportPage.dart';
->>>>>>> Stashed changes
 import '../theme/curamind_theme.dart';
 import '../widgets/coming_soon_page.dart';
 import '../widgets/curamind_app_header.dart';
@@ -26,7 +22,6 @@ class ClinicianShell extends StatefulWidget {
   final int initialIndex;
 
   static const destinations = [
-    NavDestination(label: 'Home', icon: Icons.home_outlined),
     NavDestination(label: 'Monitor', icon: Icons.monitor_heart_outlined),
     NavDestination(label: 'Dual Chart', icon: Icons.stacked_line_chart),
     NavDestination(label: 'Prescribe', icon: Icons.medication_liquid_outlined),
@@ -58,10 +53,6 @@ class _ClinicianShellState extends State<ClinicianShell> {
     _index =
         widget.initialIndex.clamp(0, ClinicianShell.destinations.length - 1);
     _pages = [
-      ClinicianHomePage(
-        displayName: widget.displayName,
-        onNavigate: _go,
-      ),
       const PatientMonitoringDashboard(),
       const DualBivariateDashboard(),
       const MedicationPrescriptionInputPage(),

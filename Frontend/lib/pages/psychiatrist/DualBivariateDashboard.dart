@@ -186,7 +186,6 @@ class _DualBivariateDashboardState extends State<DualBivariateDashboard> {
               ),
             ],
           ),
-      ),
     );
   }
 }

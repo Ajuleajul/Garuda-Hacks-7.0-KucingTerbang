@@ -285,7 +285,6 @@ class _ExportClinicalReportPageState extends State<ExportClinicalReportPage> {
               ],
             ),
         ),
-      ),
     );
   }
 }
