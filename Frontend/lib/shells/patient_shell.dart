@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../pages/patient/AuthPage.dart';
 import '../pages/patient/ClinicianLinkPage.dart';
+import '../pages/patient/EMADiaryPage.dart';
 import '../pages/patient/ProfilePage.dart';
 import '../theme/curamind_theme.dart';
 import '../widgets/coming_soon_page.dart';
@@ -49,11 +50,7 @@ class _PatientShellState extends State<PatientShell> {
     _index = widget.initialIndex.clamp(0, PatientShell.destinations.length - 1);
     _pages = [
       _PatientHomeBody(name: widget.displayName),
-      const ComingSoonPage(
-        title: 'DBT Diary',
-        subtitle: 'Mood, triggers, urges, and coping journal coming next.',
-        icon: Icons.edit_note_outlined,
-      ),
+      const EMADiaryPage(embedded: true),
       const ComingSoonPage(
         title: 'Medications',
         subtitle: 'Reminders and adherence logging coming next.',
