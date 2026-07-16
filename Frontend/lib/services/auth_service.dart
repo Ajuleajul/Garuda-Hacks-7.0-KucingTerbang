@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthUser {
@@ -79,11 +83,50 @@ class AuthService {
 
   GoTrueClient get _auth => Supabase.instance.client.auth;
 
+  /// Same key supabase_flutter uses for SharedPreferences session storage.
+  static String persistSessionKeyForUrl(String supabaseUrl) {
+    final host = Uri.parse(supabaseUrl).host;
+    final projectRef = host.split('.').first;
+    return 'sb-$projectRef-auth-token';
+  }
+
+  String get persistSessionKey {
+    final url = dotenv.env['SUPABASE_URL']?.trim() ?? '';
+    if (url.isEmpty) return 'sb-auth-token';
+    return persistSessionKeyForUrl(url);
+  }
+
   /// Must match Supabase → Authentication → URL Configuration → Redirect URLs.
   String get authRedirectUrl {
     final fromEnv = dotenv.env['SUPABASE_AUTH_REDIRECT']?.trim();
     if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;
     return 'curamind://auth-callback';
+  }
+
+  /// Write session to SharedPreferences so cold start can restore it.
+  /// (Backup — supabase_flutter also persists via its auth listener.)
+  Future<void> persistSession(Session session) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(persistSessionKey, jsonEncode(session.toJson()));
+  }
+
+  /// Re-apply any stored session after [Supabase.initialize] (awaited).
+  Future<Session?> restorePersistedSession() async {
+    final existing = _auth.currentSession;
+    if (existing != null) return existing;
+
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(persistSessionKey);
+    if (raw == null || raw.isEmpty) return null;
+
+    try {
+      await _auth.recoverSession(raw);
+      return _auth.currentSession;
+    } catch (_) {
+      // Stale/invalid token — clear so we don't loop on a bad session.
+      await prefs.remove(persistSessionKey);
+      return null;
+    }
   }
 
   Future<SignUpOutcome> register({
@@ -112,6 +155,8 @@ class AuthService {
       if (res.session == null) {
         return SignUpNeedsVerification(email: trimmedEmail);
       }
+
+      await persistSession(res.session!);
 
       return SignUpSignedIn(
         AuthResult(
@@ -144,13 +189,6 @@ class AuthService {
         throw AuthFailure('Sign in failed. Check your email and password.');
       }
 
-      if (user.emailConfirmedAt == null) {
-        await _auth.signOut();
-        throw AuthFailure(
-          'Email not verified yet. Check your inbox, or resend the verification email.',
-        );
-      }
-
       final authUser = AuthUser.fromUser(user);
       if (role != null &&
           authUser.role.isNotEmpty &&
@@ -162,6 +200,8 @@ class AuthService {
               : 'This account is not registered as a patient.',
         );
       }
+
+      await persistSession(session);
 
       return AuthResult(
         token: session.accessToken,
@@ -223,9 +263,21 @@ class AuthService {
     return AuthUser.fromUser(user);
   }
 
+  AuthUser? get currentUser {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    return AuthUser.fromUser(user);
+  }
+
+  Session? get currentSession => _auth.currentSession;
+
   Stream<AuthState> get onAuthStateChange => _auth.onAuthStateChange;
 
-  Future<void> logout() async => _auth.signOut();
+  Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(persistSessionKey);
+    await _auth.signOut();
+  }
 
   String _friendlyError(Object e) {
     if (e is AuthException) return e.message;

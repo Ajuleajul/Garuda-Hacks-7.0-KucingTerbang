@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'pages/patient/AuthGate.dart';
+import 'services/auth_service.dart';
 import 'theme/curamind_theme.dart';
 import 'animated_cursor.dart';
 
@@ -23,13 +25,22 @@ Future<void> main() async {
     );
   }
 
+  // Warm prefs once; let Supabase call SharedPreferencesLocalStorage.initialize().
+  await SharedPreferences.getInstance();
+
   await Supabase.initialize(
     url: supabaseUrl,
     anonKey: supabaseAnonKey,
-    authOptions: const FlutterAuthClientOptions(
+    authOptions: FlutterAuthClientOptions(
       authFlowType: AuthFlowType.pkce,
+      localStorage: SharedPreferencesLocalStorage(
+        persistSessionKey: AuthService.persistSessionKeyForUrl(supabaseUrl),
+      ),
     ),
   );
+
+  // Awaited restore — supabase_flutter's recoverSession() is fire-and-forget.
+  await AuthService.instance.restorePersistedSession();
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(

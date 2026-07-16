@@ -13,6 +13,11 @@ class NavDestination {
   final IconData icon;
 }
 
+/// Breakpoint: phone / narrow layout uses bottom icon nav.
+bool curamindUseBottomNav(BuildContext context) {
+  return MediaQuery.sizeOf(context).width < 720;
+}
+
 class CuramindAppHeader extends StatelessWidget implements PreferredSizeWidget {
   const CuramindAppHeader({
     super.key,
@@ -20,12 +25,14 @@ class CuramindAppHeader extends StatelessWidget implements PreferredSizeWidget {
     required this.selectedIndex,
     required this.onDestinationSelected,
     this.userLabel,
+    this.showNav = true,
   });
 
   final List<NavDestination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
   final String? userLabel;
+  final bool showNav;
 
   @override
   Size get preferredSize => const Size.fromHeight(64);
@@ -76,31 +83,102 @@ class CuramindAppHeader extends StatelessWidget implements PreferredSizeWidget {
                   ),
                 ),
               ],
-              const SizedBox(width: 16),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: List.generate(destinations.length, (i) {
-                        final dest = destinations[i];
-                        final selected = i == selectedIndex;
-                        return Padding(
-                          padding: EdgeInsets.only(left: i == 0 ? 0 : 6),
-                          child: _NavChip(
-                            label: dest.label,
-                            icon: dest.icon,
-                            selected: selected,
-                            onTap: () => onDestinationSelected(i),
-                          ),
-                        );
-                      }),
+              if (showNav) ...[
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: List.generate(destinations.length, (i) {
+                          final dest = destinations[i];
+                          final selected = i == selectedIndex;
+                          return Padding(
+                            padding: EdgeInsets.only(left: i == 0 ? 0 : 6),
+                            child: _NavChip(
+                              label: dest.label,
+                              icon: dest.icon,
+                              selected: selected,
+                              onTap: () => onDestinationSelected(i),
+                            ),
+                          );
+                        }),
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ] else
+                const Spacer(),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Icon-only bottom navigation for phone layouts.
+class CuramindBottomNav extends StatelessWidget {
+  const CuramindBottomNav({
+    super.key,
+    required this.destinations,
+    required this.selectedIndex,
+    required this.onDestinationSelected,
+  });
+
+  final List<NavDestination> destinations;
+  final int selectedIndex;
+  final ValueChanged<int> onDestinationSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: CuramindColors.white.withValues(alpha: 0.96),
+      elevation: 0,
+      child: Container(
+        decoration: const BoxDecoration(
+          border: Border(
+            top: BorderSide(color: CuramindColors.mistBlue),
+          ),
+        ),
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 60,
+            child: Row(
+              children: List.generate(destinations.length, (i) {
+                final dest = destinations[i];
+                final selected = i == selectedIndex;
+                return Expanded(
+                  child: InkWell(
+                    onTap: () => onDestinationSelected(i),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          dest.icon,
+                          size: 24,
+                          color: selected
+                              ? CuramindColors.sageDeep
+                              : CuramindColors.inkMuted,
+                        ),
+                        const SizedBox(height: 4),
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          width: selected ? 16 : 0,
+                          height: 3,
+                          decoration: BoxDecoration(
+                            color: CuramindColors.sageDeep,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ),
           ),
         ),
       ),

@@ -21,15 +21,26 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   StreamSubscription<AuthState>? _sub;
-  bool _booting = true;
   bool _passwordRecovery = false;
   AuthUser? _user;
+  bool _ready = false;
 
   @override
   void initState() {
     super.initState();
-    _restoreSession();
+    _applyFromClient();
     _sub = AuthService.instance.onAuthStateChange.listen(_onAuthState);
+
+    // Catch late recoverSession() completion from supabase_flutter.
+    Future<void>.delayed(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      final session = AuthService.instance.currentSession;
+      if (session != null && _user == null) {
+        _applySession(session);
+      } else if (!_ready) {
+        setState(() => _ready = true);
+      }
+    });
   }
 
   @override
@@ -38,33 +49,39 @@ class _AuthGateState extends State<AuthGate> {
     super.dispose();
   }
 
-  void _restoreSession() {
-    final session = Supabase.instance.client.auth.currentSession;
-    final user = Supabase.instance.client.auth.currentUser;
+  void _applyFromClient() {
+    final session = AuthService.instance.currentSession;
+    final user = AuthService.instance.currentUser;
     setState(() {
-      _booting = false;
+      _ready = true;
       _passwordRecovery = false;
-      _user = (session != null && user != null)
-          ? AuthUser.fromUser(user)
-          : null;
+      _user = session != null ? user : null;
+    });
+  }
+
+  void _applySession(Session? session) {
+    setState(() {
+      _ready = true;
+      if (session == null) {
+        if (!_passwordRecovery) _user = null;
+      } else {
+        _user = AuthUser.fromUser(session.user);
+      }
     });
   }
 
   void _onAuthState(AuthState data) {
+    if (!mounted) return;
+
     switch (data.event) {
       case AuthChangeEvent.passwordRecovery:
-        if (!mounted) return;
         setState(() {
-          _booting = false;
+          _ready = true;
           _passwordRecovery = true;
-          _user = data.session?.user != null
-              ? AuthUser.fromUser(data.session!.user)
-              : _user;
         });
       case AuthChangeEvent.signedOut:
-        if (!mounted) return;
         setState(() {
-          _booting = false;
+          _ready = true;
           _passwordRecovery = false;
           _user = null;
         });
@@ -72,17 +89,19 @@ class _AuthGateState extends State<AuthGate> {
       case AuthChangeEvent.signedIn:
       case AuthChangeEvent.tokenRefreshed:
       case AuthChangeEvent.userUpdated:
-        if (!mounted) return;
-        final session = data.session;
-        final user = session?.user ?? Supabase.instance.client.auth.currentUser;
-        setState(() {
-          _booting = false;
-          if (!_passwordRecovery) {
-            _user = (session != null && user != null)
-                ? AuthUser.fromUser(user)
-                : null;
-          }
-        });
+        if (_passwordRecovery &&
+            data.event != AuthChangeEvent.signedIn) {
+          setState(() => _ready = true);
+          return;
+        }
+        final session =
+            data.session ?? AuthService.instance.currentSession;
+        if (_passwordRecovery && data.event == AuthChangeEvent.signedIn) {
+          // Stay on reset screen until password flow finishes / signs out.
+          setState(() => _ready = true);
+          return;
+        }
+        _applySession(session);
       default:
         break;
     }
@@ -90,7 +109,7 @@ class _AuthGateState extends State<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
-    if (_booting) {
+    if (!_ready) {
       return const _BootSplash();
     }
 

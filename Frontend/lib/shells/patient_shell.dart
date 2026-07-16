@@ -73,6 +73,8 @@ class _PatientShellState extends State<PatientShell> {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = curamindUseBottomNav(context);
+
     return Scaffold(
       backgroundColor: CuramindColors.mist,
       appBar: CuramindAppHeader(
@@ -80,8 +82,16 @@ class _PatientShellState extends State<PatientShell> {
         selectedIndex: _index,
         onDestinationSelected: _go,
         userLabel: 'Patient',
+        showNav: !mobile,
       ),
       body: IndexedStack(index: _index, children: _pages),
+      bottomNavigationBar: mobile
+          ? CuramindBottomNav(
+              destinations: PatientShell.destinations,
+              selectedIndex: _index,
+              onDestinationSelected: _go,
+            )
+          : null,
     );
   }
 }
