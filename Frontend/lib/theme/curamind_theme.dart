@@ -18,6 +18,12 @@ abstract final class CuramindColors {
   static const inkMuted = Color(0xFF5A6B72);
 
   static const danger = Color(0xFF8F7A7A);
+  static const coral = Color(0xFFD4685A);
+  static const coralSoft = Color(0xFFF3D6D1);
+  static const gold = Color(0xFFC4A35A);
+  static const goldSoft = Color(0xFFF3EAD2);
+  static const ok = Color(0xFF3F8F6B);
+  static const okSoft = Color(0xFFD7EEE3);
 }
 
 ThemeData buildCuramindTheme() {
@@ -102,7 +108,7 @@ ThemeData buildCuramindTheme() {
       style: FilledButton.styleFrom(
         backgroundColor: CuramindColors.sageDeep,
         foregroundColor: CuramindColors.white,
-        minimumSize: const Size.fromHeight(52),
+        minimumSize: const Size(64, 52),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         textStyle: GoogleFonts.outfit(
           fontSize: 16,
