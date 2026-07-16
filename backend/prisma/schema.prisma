@@ -11,3 +11,29 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum Role {
+  PASIEN
+  PSIKIATER
+}
+
+model User {
+  id         String   @id @default(uuid())
+  email      String   @unique
+  full_name  String
+  role       Role
+  created_at DateTime @default(now())
+
+  mood_logs  MoodLog[] 
+}
+
+model MoodLog {
+  id             String   @id @default(uuid())
+  patient_id     String
+  patient        User     @relation(fields: [patient_id], references: [id])
+  mood_score     Int
+  triggers       String[]
+  urge_intensity Int
+  coping_journal String?
+  created_at     DateTime @default(now())
+}
