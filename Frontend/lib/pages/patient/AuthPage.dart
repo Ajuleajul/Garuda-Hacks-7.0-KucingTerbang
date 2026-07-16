@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../services/auth_service.dart';
 import '../../shells/patient_shell.dart';
 import '../../theme/curamind_theme.dart';
+import '../auth/EmailVerificationPage.dart';
+import '../auth/ForgotPasswordPage.dart';
 import '../psychiatrist/ClinicianLoginPage.dart';
 import '../../animated_cursor.dart';
 
@@ -80,40 +82,40 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
     setState(() => _loading = true);
     try {
       final auth = AuthService.instance;
-      final AuthResult result;
       if (_mode == AuthMode.register) {
-        result = await auth.register(
+        final outcome = await auth.register(
           email: _emailController.text,
           password: _passwordController.text,
           fullName: _nameController.text,
           role: 'PATIENT',
         );
+
+        if (!mounted) return;
+
+        switch (outcome) {
+          case SignUpNeedsVerification(:final email):
+            await Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => EmailVerificationPage(email: email),
+              ),
+            );
+            setState(() => _mode = AuthMode.login);
+          case SignUpSignedIn(:final result):
+            _enterApp(result);
+        }
       } else {
-        result = await auth.login(
+        final result = await auth.login(
           email: _emailController.text,
           password: _passwordController.text,
           role: 'PATIENT',
         );
+        if (!mounted) return;
+        _enterApp(result);
       }
-
+    } on AuthFailure catch (e) {
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder<void>(
-          transitionDuration: const Duration(milliseconds: 420),
-          pageBuilder: (context, animation, secondaryAnimation) {
-            return FadeTransition(
-              opacity: animation,
-            child: PatientShell(
-              displayName: result.user.fullName.isEmpty
-                  ? 'Patient'
-                  : result.user.fullName,
-            ),
-            );
-          },
-        ),
-      );
-    } on AuthException catch (e) {
-      if (!mounted) return;
+      final unverified = e.message.toLowerCase().contains('not verified') ||
+          e.message.toLowerCase().contains('not confirmed');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
@@ -122,6 +124,21 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
             e.message,
             style: GoogleFonts.outfit(color: CuramindColors.white),
           ),
+          action: unverified
+              ? SnackBarAction(
+                  label: 'Resend',
+                  textColor: CuramindColors.white,
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => EmailVerificationPage(
+                          email: _emailController.text.trim(),
+                        ),
+                      ),
+                    );
+                  },
+                )
+              : null,
         ),
       );
     } catch (_) {
@@ -131,7 +148,7 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
           behavior: SnackBarBehavior.floating,
           backgroundColor: CuramindColors.danger,
           content: Text(
-            'Cannot reach server. Is the API running?',
+            'Cannot reach auth service. Check your connection.',
             style: GoogleFonts.outfit(color: CuramindColors.white),
           ),
         ),
@@ -139,6 +156,34 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _enterApp(AuthResult result) {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 420),
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return FadeTransition(
+            opacity: animation,
+            child: PatientShell(
+              displayName: result.user.fullName.isEmpty
+                  ? 'Patient'
+                  : result.user.fullName,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _openForgotPassword() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ForgotPasswordPage(
+          initialEmail: _emailController.text.trim(),
+        ),
+      ),
+    );
   }
 
   void _openClinicianLogin() {
@@ -343,7 +388,21 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
                                         )
                                       : const SizedBox.shrink(),
                                 ),
-                                const SizedBox(height: 24),
+                                if (!isRegister)
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: CursorHoverRegion(
+                                      child: TextButton(
+                                        onPressed: _loading
+                                            ? null
+                                            : _openForgotPassword,
+                                        child: const Text('Forgot password?'),
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  const SizedBox(height: 10),
+                                SizedBox(height: isRegister ? 14 : 4),
                                 CursorHoverRegion(
                                   child: FilledButton(
                                     onPressed: _loading ? null : _submit,
