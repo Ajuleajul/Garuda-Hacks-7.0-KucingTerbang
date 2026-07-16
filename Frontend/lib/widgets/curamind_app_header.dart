@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../animated_cursor.dart';
 import '../theme/curamind_theme.dart';
 
 class NavDestination {
@@ -151,9 +152,10 @@ class CuramindBottomNav extends StatelessWidget {
                 final dest = destinations[i];
                 final selected = i == selectedIndex;
                 return Expanded(
-                  child: InkWell(
-                    onTap: () => onDestinationSelected(i),
-                    child: Column(
+                  child: CursorHoverRegion(
+                    child: InkWell(
+                      onTap: () => onDestinationSelected(i),
+                      child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
@@ -206,11 +208,12 @@ class _NavChip extends StatelessWidget {
           ? CuramindColors.sageDeep
           : CuramindColors.mist.withValues(alpha: 0.95),
       borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: CursorHoverRegion(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -234,6 +237,7 @@ class _NavChip extends StatelessWidget {
               ),
             ],
           ),
+        ),
         ),
       ),
     );
