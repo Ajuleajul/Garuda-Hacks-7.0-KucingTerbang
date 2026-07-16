@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../services/auth_service.dart';
 import '../../theme/curamind_theme.dart';
 import '../patient/AuthPage.dart';
+import 'ProfilePage.dart';
 
 enum ClinicianAuthMode { login, register }
 
@@ -80,39 +82,66 @@ class _ClinicianLoginPageState extends State<ClinicianLoginPage>
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _loading = true);
-    await Future<void>.delayed(const Duration(milliseconds: 700));
-    if (!mounted) return;
-    setState(() => _loading = false);
+    try {
+      final auth = AuthService.instance;
+      final AuthResult result;
+      if (_mode == ClinicianAuthMode.register) {
+        result = await auth.register(
+          email: _emailController.text,
+          password: _passwordController.text,
+          fullName: _nameController.text,
+          role: 'PSIKIATER',
+        );
+      } else {
+        result = await auth.login(
+          email: _emailController.text,
+          password: _passwordController.text,
+          role: 'PSIKIATER',
+        );
+      }
 
-    final action =
-        _mode == ClinicianAuthMode.login ? 'Signed in' : 'Registered';
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: CuramindColors.sageDeep,
-        content: Text(
-          '$action successfully as Psychiatrist (demo, no backend).',
-          style: GoogleFonts.outfit(color: CuramindColors.white),
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder<void>(
+          transitionDuration: const Duration(milliseconds: 420),
+          pageBuilder: (context, animation, secondaryAnimation) {
+            return FadeTransition(
+              opacity: animation,
+              child: ProfilePage(
+                name: result.user.fullName,
+                role: 'Psychiatrist',
+              ),
+            );
+          },
         ),
-      ),
-    );
-
-    final displayName = _mode == ClinicianAuthMode.register
-        ? _nameController.text.trim()
-        : _emailController.text.trim().split('@').first;
-
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder<void>(
-        transitionDuration: const Duration(milliseconds: 420),
-        pageBuilder: (context, animation, secondaryAnimation) {
-          return FadeTransition(
-            opacity: animation,
-            child: _ClinicianSuccessPlaceholder(name: displayName),
-          );
-        },
-      ),
-    );
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: CuramindColors.danger,
+          content: Text(
+            e.message,
+            style: GoogleFonts.outfit(color: CuramindColors.white),
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: CuramindColors.danger,
+          content: Text(
+            'Cannot reach server. Is the API running?',
+            style: GoogleFonts.outfit(color: CuramindColors.white),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -513,80 +542,6 @@ class _ClinicianAtmosphere extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: CuramindColors.sage.withValues(alpha: 0.14),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ClinicianSuccessPlaceholder extends StatelessWidget {
-  const _ClinicianSuccessPlaceholder({required this.name});
-
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          const _ClinicianAtmosphere(),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const ClinicianLoginPage(),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.arrow_back_rounded),
-                      label: const Text('Sign out'),
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    'Curamind Clinic',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.fraunces(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w600,
-                      color: CuramindColors.ink,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Hello, $name',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.outfit(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w600,
-                      color: CuramindColors.ink,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'You are signed in as a Psychiatrist.\n'
-                    'Monitoring dashboard coming next.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.outfit(
-                      fontSize: 15,
-                      height: 1.45,
-                      color: CuramindColors.inkMuted,
-                    ),
-                  ),
-                  const Spacer(flex: 2),
-                ],
               ),
             ),
           ),
