@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../services/diary_service.dart';
 import '../../theme/curamind_theme.dart';
+
+enum _HistoryFilter { all, dbtCard, coping }
 
 class EMADiaryPage extends StatefulWidget {
   const EMADiaryPage({
@@ -34,8 +37,11 @@ class _EMADiaryPageState extends State<EMADiaryPage>
   final _behaviorController = TextEditingController();
   final _outcomeController = TextEditingController();
 
-  bool _saving = false;
-  final List<_DiaryEntry> _history = [];
+  bool _savingDbt = false;
+  bool _savingCoping = false;
+  bool _loadingHistory = true;
+  final List<DiaryEntryModel> _history = [];
+  _HistoryFilter _historyFilter = _HistoryFilter.all;
 
   static const _emotionOptions = [
     'Sad',
@@ -74,6 +80,7 @@ class _EMADiaryPageState extends State<EMADiaryPage>
   void initState() {
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
+    _loadHistory();
   }
 
   @override
@@ -87,7 +94,7 @@ class _EMADiaryPageState extends State<EMADiaryPage>
     super.dispose();
   }
 
-  void _resetForm() {
+  void _resetDbtForm() {
     setState(() {
       _mood = 5;
       _urgeNssi = 0;
@@ -97,6 +104,11 @@ class _EMADiaryPageState extends State<EMADiaryPage>
       _triggers.clear();
       _skills.clear();
       _notesController.clear();
+    });
+  }
+
+  void _resetCopingForm() {
+    setState(() {
       _situationController.clear();
       _thoughtsController.clear();
       _behaviorController.clear();
@@ -104,44 +116,119 @@ class _EMADiaryPageState extends State<EMADiaryPage>
     });
   }
 
-  Future<void> _saveEntry() async {
-    setState(() => _saving = true);
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-    if (!mounted) return;
-
-    final entry = _DiaryEntry(
-      createdAt: DateTime.now(),
-      mood: _mood.round(),
-      affectIntensity: _affectIntensity.round(),
-      urgeNssi: _urgeNssi.round(),
-      urgeSubstance: _urgeSubstance.round(),
-      emotions: _emotions.toList(),
-      triggers: _triggers.toList(),
-      skills: _skills.toList(),
-      notes: _notesController.text.trim(),
-      situation: _situationController.text.trim(),
-      thoughts: _thoughtsController.text.trim(),
-      behavior: _behaviorController.text.trim(),
-      outcome: _outcomeController.text.trim(),
-    );
-
-    setState(() {
-      _history.insert(0, entry);
-      _saving = false;
-    });
-    _resetForm();
-    _tabs.animateTo(2);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: CuramindColors.sageDeep,
-        content: Text(
-          'Diary entry saved (local demo).',
-          style: GoogleFonts.outfit(color: CuramindColors.white),
+  Future<void> _loadHistory() async {
+    setState(() => _loadingHistory = true);
+    try {
+      final entries = await DiaryService.instance.loadMyEntries();
+      if (!mounted) return;
+      setState(() {
+        _history
+          ..clear()
+          ..addAll(entries);
+        _loadingHistory = false;
+      });
+    } on DiaryFailure catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingHistory = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: CuramindColors.danger,
+          content: Text(
+            e.message,
+            style: GoogleFonts.outfit(color: CuramindColors.white),
+          ),
         ),
-      ),
-    );
+      );
+    }
+  }
+
+  Future<void> _saveDbtEntry() async {
+    setState(() => _savingDbt = true);
+    try {
+      final entry = await DiaryService.instance.saveDbtCard(
+        mood: _mood.round(),
+        affectIntensity: _affectIntensity.round(),
+        urgeNssi: _urgeNssi.round(),
+        urgeSubstance: _urgeSubstance.round(),
+        emotions: _emotions.toList(),
+        triggers: _triggers.toList(),
+        skills: _skills.toList(),
+        notes: _notesController.text.trim(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _history.insert(0, entry);
+        _savingDbt = false;
+      });
+      _resetDbtForm();
+      _tabs.animateTo(2);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: CuramindColors.sageDeep,
+          content: Text(
+            'DBT card saved.',
+            style: GoogleFonts.outfit(color: CuramindColors.white),
+          ),
+        ),
+      );
+    } on DiaryFailure catch (e) {
+      if (!mounted) return;
+      setState(() => _savingDbt = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: CuramindColors.danger,
+          content: Text(
+            e.message,
+            style: GoogleFonts.outfit(color: CuramindColors.white),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _saveCopingEntry() async {
+    setState(() => _savingCoping = true);
+    try {
+      final entry = await DiaryService.instance.saveCoping(
+        situation: _situationController.text.trim(),
+        thoughts: _thoughtsController.text.trim(),
+        behavior: _behaviorController.text.trim(),
+        outcome: _outcomeController.text.trim(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _history.insert(0, entry);
+        _savingCoping = false;
+      });
+      _resetCopingForm();
+      _tabs.animateTo(2);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: CuramindColors.sageDeep,
+          content: Text(
+            'Coping entry saved.',
+            style: GoogleFonts.outfit(color: CuramindColors.white),
+          ),
+        ),
+      );
+    } on DiaryFailure catch (e) {
+      if (!mounted) return;
+      setState(() => _savingCoping = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: CuramindColors.danger,
+          content: Text(
+            e.message,
+            style: GoogleFonts.outfit(color: CuramindColors.white),
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -225,26 +312,35 @@ class _EMADiaryPageState extends State<EMADiaryPage>
                 onUrgeNssi: (v) => setState(() => _urgeNssi = v),
                 onUrgeSubstance: (v) => setState(() => _urgeSubstance = v),
                 onToggleEmotion: (e) => setState(() {
-                  _emotions.contains(e) ? _emotions.remove(e) : _emotions.add(e);
+                  _emotions.contains(e)
+                      ? _emotions.remove(e)
+                      : _emotions.add(e);
                 }),
                 onToggleTrigger: (t) => setState(() {
-                  _triggers.contains(t) ? _triggers.remove(t) : _triggers.add(t);
+                  _triggers.contains(t)
+                      ? _triggers.remove(t)
+                      : _triggers.add(t);
                 }),
                 onToggleSkill: (s) => setState(() {
                   _skills.contains(s) ? _skills.remove(s) : _skills.add(s);
                 }),
-                saving: _saving,
-                onSave: _saveEntry,
+                saving: _savingDbt,
+                onSave: _saveDbtEntry,
               ),
               _CopingTab(
                 situationController: _situationController,
                 thoughtsController: _thoughtsController,
                 behaviorController: _behaviorController,
                 outcomeController: _outcomeController,
-                saving: _saving,
-                onSave: _saveEntry,
+                saving: _savingCoping,
+                onSave: _saveCopingEntry,
               ),
-              _HistoryTab(entries: _history),
+              _HistoryTab(
+                entries: _history,
+                loading: _loadingHistory,
+                filter: _historyFilter,
+                onFilter: (f) => setState(() => _historyFilter = f),
+              ),
             ],
           ),
         ),
@@ -413,7 +509,7 @@ class _DbtCardTab extends StatelessWidget {
                           color: CuramindColors.white,
                         ),
                       )
-                    : const Text('Save diary entry'),
+                    : const Text('Save DBT card'),
               ),
             ],
           ),
@@ -539,130 +635,361 @@ class _CopingTab extends StatelessWidget {
 }
 
 class _HistoryTab extends StatelessWidget {
-  const _HistoryTab({required this.entries});
+  const _HistoryTab({
+    required this.entries,
+    required this.loading,
+    required this.filter,
+    required this.onFilter,
+  });
 
-  final List<_DiaryEntry> entries;
+  final List<DiaryEntryModel> entries;
+  final bool loading;
+  final _HistoryFilter filter;
+  final ValueChanged<_HistoryFilter> onFilter;
+
+  List<DiaryEntryModel> get _filtered {
+    switch (filter) {
+      case _HistoryFilter.all:
+        return entries;
+      case _HistoryFilter.dbtCard:
+        return entries.where((e) => e.kind == DiaryEntryKind.dbtCard).toList();
+      case _HistoryFilter.coping:
+        return entries.where((e) => e.kind == DiaryEntryKind.coping).toList();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (entries.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+    final list = _filtered;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
             children: [
-              Icon(
-                Icons.menu_book_outlined,
-                size: 42,
-                color: CuramindColors.slate,
+              _FilterChip(
+                label: 'All',
+                selected: filter == _HistoryFilter.all,
+                onTap: () => onFilter(_HistoryFilter.all),
               ),
-              const SizedBox(height: 12),
-              Text(
-                'No entries yet',
-                style: GoogleFonts.outfit(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: CuramindColors.ink,
-                ),
+              _FilterChip(
+                label: 'DBT Card',
+                selected: filter == _HistoryFilter.dbtCard,
+                onTap: () => onFilter(_HistoryFilter.dbtCard),
               ),
-              const SizedBox(height: 6),
-              Text(
-                'Saved diary cards will appear here for today’s session.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  color: CuramindColors.inkMuted,
-                ),
+              _FilterChip(
+                label: 'Coping',
+                selected: filter == _HistoryFilter.coping,
+                onTap: () => onFilter(_HistoryFilter.coping),
               ),
             ],
           ),
         ),
-      );
-    }
+        Expanded(
+          child: loading
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    color: CuramindColors.sageDeep,
+                  ),
+                )
+              : list.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.menu_book_outlined,
+                          size: 42,
+                          color: CuramindColors.slate,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No entries yet',
+                          style: GoogleFonts.outfit(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: CuramindColors.ink,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          filter == _HistoryFilter.all
+                              ? 'Saved DBT cards and coping entries will appear here.'
+                              : filter == _HistoryFilter.dbtCard
+                                  ? 'No DBT cards in this filter yet.'
+                                  : 'No coping entries in this filter yet.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            color: CuramindColors.inkMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
+                  itemCount: list.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemBuilder: (context, i) => _HistoryCard(entry: list[i]),
+                ),
+        ),
+      ],
+    );
+  }
+}
 
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
-      itemCount: entries.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
-      itemBuilder: (context, i) {
-        final e = entries[i];
-        final time =
-            '${e.createdAt.hour.toString().padLeft(2, '0')}:${e.createdAt.minute.toString().padLeft(2, '0')}';
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: CuramindColors.white.withValues(alpha: 0.78),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: CuramindColors.mistBlue),
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      selectedColor: CuramindColors.sageSoft,
+      labelStyle: GoogleFonts.outfit(
+        fontSize: 13,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+        color: selected ? CuramindColors.sageDeep : CuramindColors.inkMuted,
+      ),
+      side: BorderSide(
+        color: selected ? CuramindColors.sage : CuramindColors.mistBlue,
+      ),
+      backgroundColor: CuramindColors.mist,
+      showCheckmark: false,
+    );
+  }
+}
+
+class _HistoryCard extends StatelessWidget {
+  const _HistoryCard({required this.entry});
+
+  final DiaryEntryModel entry;
+
+  static const _months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  static const _weekdays = [
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
+  ];
+
+  String get _stamp {
+    final d = entry.createdAt.toLocal();
+    final wd = _weekdays[d.weekday - 1];
+    final mo = _months[d.month - 1];
+    final hh = d.hour.toString().padLeft(2, '0');
+    final mm = d.minute.toString().padLeft(2, '0');
+    final ss = d.second.toString().padLeft(2, '0');
+    return '$wd, $mo ${d.day}, ${d.year} · $hh:$mm:$ss';
+  }
+
+  bool get _isDbt => entry.kind == DiaryEntryKind.dbtCard;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: CuramindColors.white.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: CuramindColors.mistBlue),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _isDbt
+                      ? CuramindColors.sageSoft
+                      : CuramindColors.mistBlue,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: Text(
+                  _isDbt ? 'DBT Card' : 'Coping',
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: _isDbt
+                        ? CuramindColors.sageDeep
+                        : CuramindColors.ocean,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              if (_isDbt)
+                Text(
+                  'Mood ${entry.mood}/10',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.w600,
+                    color: CuramindColors.ink,
+                  ),
+                ),
+            ],
           ),
-          child: Column(
+          const SizedBox(height: 8),
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Text(
-                    time,
-                    style: GoogleFonts.outfit(
-                      fontWeight: FontWeight.w700,
-                      color: CuramindColors.ocean,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    'Mood ${e.mood}/10',
-                    style: GoogleFonts.outfit(
-                      fontWeight: FontWeight.w600,
-                      color: CuramindColors.ink,
-                    ),
-                  ),
-                ],
+              const Icon(
+                Icons.schedule_rounded,
+                size: 16,
+                color: CuramindColors.ocean,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _stamp,
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: CuramindColors.ocean,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_isDbt) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Intensity ${entry.affectIntensity}/10 · NSSI urge ${entry.urgeNssi} · Substance urge ${entry.urgeSubstance}',
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                color: CuramindColors.inkMuted,
+              ),
+            ),
+            if (entry.emotions.isNotEmpty) ...[
+              const SizedBox(height: 6),
               Text(
-                'Urges · NSSI ${e.urgeNssi} · Substance ${e.urgeSubstance}',
+                'Emotions: ${entry.emotions.join(', ')}',
                 style: GoogleFonts.outfit(
                   fontSize: 13,
+                  color: CuramindColors.ink,
+                ),
+              ),
+            ],
+            if (entry.triggers.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Triggers: ${entry.triggers.join(', ')}',
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  color: CuramindColors.ink,
+                ),
+              ),
+            ],
+            if (entry.skills.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Skills: ${entry.skills.join(', ')}',
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  color: CuramindColors.ink,
+                ),
+              ),
+            ],
+            if (entry.notes.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                entry.notes,
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  height: 1.4,
                   color: CuramindColors.inkMuted,
                 ),
               ),
-              if (e.emotions.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(
-                  'Emotions: ${e.emotions.join(', ')}',
-                  style: GoogleFonts.outfit(
-                    fontSize: 13,
-                    color: CuramindColors.ink,
-                  ),
-                ),
-              ],
-              if (e.skills.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(
-                  'Skills: ${e.skills.join(', ')}',
-                  style: GoogleFonts.outfit(
-                    fontSize: 13,
-                    color: CuramindColors.ink,
-                  ),
-                ),
-              ],
-              if (e.notes.isNotEmpty || e.situation.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  e.notes.isNotEmpty ? e.notes : e.situation,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.outfit(
-                    fontSize: 13,
-                    height: 1.4,
-                    color: CuramindColors.inkMuted,
-                  ),
-                ),
-              ],
             ],
+          ] else ...[
+            if (entry.situation.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _CopingLine(label: 'Situation', text: entry.situation),
+            ],
+            if (entry.thoughts.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _CopingLine(label: 'Thoughts', text: entry.thoughts),
+            ],
+            if (entry.behavior.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _CopingLine(label: 'Response', text: entry.behavior),
+            ],
+            if (entry.outcome.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _CopingLine(label: 'Outcome', text: entry.outcome),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CopingLine extends StatelessWidget {
+  const _CopingLine({required this.label, required this.text});
+
+  final String label;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: CuramindColors.ink,
           ),
-        );
-      },
+        ),
+        const SizedBox(height: 2),
+        Text(
+          text,
+          style: GoogleFonts.outfit(
+            fontSize: 13,
+            height: 1.4,
+            color: CuramindColors.inkMuted,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -820,36 +1147,4 @@ class _ChipWrap extends StatelessWidget {
       }).toList(),
     );
   }
-}
-
-class _DiaryEntry {
-  const _DiaryEntry({
-    required this.createdAt,
-    required this.mood,
-    required this.affectIntensity,
-    required this.urgeNssi,
-    required this.urgeSubstance,
-    required this.emotions,
-    required this.triggers,
-    required this.skills,
-    required this.notes,
-    required this.situation,
-    required this.thoughts,
-    required this.behavior,
-    required this.outcome,
-  });
-
-  final DateTime createdAt;
-  final int mood;
-  final int affectIntensity;
-  final int urgeNssi;
-  final int urgeSubstance;
-  final List<String> emotions;
-  final List<String> triggers;
-  final List<String> skills;
-  final String notes;
-  final String situation;
-  final String thoughts;
-  final String behavior;
-  final String outcome;
 }

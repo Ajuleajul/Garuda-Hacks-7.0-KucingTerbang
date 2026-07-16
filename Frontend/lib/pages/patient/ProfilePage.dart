@@ -5,6 +5,15 @@ import '../../services/auth_service.dart';
 import '../../theme/curamind_theme.dart';
 import 'AuthGate.dart';
 
+const _avatarChoices = <String, IconData>{
+  'person': Icons.person_outline_rounded,
+  'favorite': Icons.favorite_outline_rounded,
+  'selfcare': Icons.spa_outlined,
+  'book': Icons.menu_book_outlined,
+  'star': Icons.star_outline_rounded,
+  'sun': Icons.wb_sunny_outlined,
+};
+
 class ProfilePage extends StatefulWidget {
   const ProfilePage({
     super.key,
@@ -31,16 +40,27 @@ class _ProfilePageState extends State<ProfilePage> {
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
+  String _avatarKey = 'person';
   bool _obscureCurrent = true;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _savingPassword = false;
+  bool _savingProfile = false;
 
   @override
   void initState() {
     super.initState();
-    _nameController.text = widget.name;
-    _roleController.text = widget.role;
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    final user = await AuthService.instance.resolveCurrentUser();
+    if (!mounted) return;
+    setState(() {
+      _nameController.text = user?.fullName ?? widget.name;
+      _roleController.text = user?.role == 'PSYCHIATRIST' ? 'Psychiatrist' : widget.role;
+      _avatarKey = user?.avatarKey ?? 'person';
+    });
   }
 
   @override
@@ -57,24 +77,139 @@ class _ProfilePageState extends State<ProfilePage> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _savingPassword = true);
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
-    setState(() => _savingPassword = false);
-
-    _currentPasswordController.clear();
-    _newPasswordController.clear();
-    _confirmPasswordController.clear();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: CuramindColors.sageDeep,
-        content: Text(
-          'Password updated (demo, no backend).',
-          style: GoogleFonts.outfit(color: CuramindColors.white),
+    try {
+      await AuthService.instance.changePassword(
+        currentPassword: _currentPasswordController.text,
+        newPassword: _newPasswordController.text,
+      );
+      if (!mounted) return;
+      setState(() => _savingPassword = false);
+      _currentPasswordController.clear();
+      _newPasswordController.clear();
+      _confirmPasswordController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: CuramindColors.sageDeep,
+          content: Text(
+            'Password updated.',
+            style: GoogleFonts.outfit(color: CuramindColors.white),
+          ),
         ),
+      );
+    } on AuthFailure catch (e) {
+      if (!mounted) return;
+      setState(() => _savingPassword = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: CuramindColors.danger,
+          content: Text(
+            e.message,
+            style: GoogleFonts.outfit(color: CuramindColors.white),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _saveProfile() async {
+    setState(() => _savingProfile = true);
+    try {
+      final user = await AuthService.instance.updateProfile(
+        fullName: _nameController.text,
+        avatarKey: _avatarKey,
+      );
+      if (!mounted) return;
+      setState(() {
+        _savingProfile = false;
+        _nameController.text = user.fullName;
+        _avatarKey = user.avatarKey;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: CuramindColors.sageDeep,
+          content: Text(
+            'Profile updated.',
+            style: GoogleFonts.outfit(color: CuramindColors.white),
+          ),
+        ),
+      );
+    } on AuthFailure catch (e) {
+      if (!mounted) return;
+      setState(() => _savingProfile = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: CuramindColors.danger,
+          content: Text(
+            e.message,
+            style: GoogleFonts.outfit(color: CuramindColors.white),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _pickAvatar() async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: CuramindColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: _avatarChoices.entries.map((entry) {
+              final selected = entry.key == _avatarKey;
+              return InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: () => Navigator.of(ctx).pop(entry.key),
+                child: Container(
+                  width: 88,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? CuramindColors.sageSoft
+                        : CuramindColors.surface,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: selected
+                          ? CuramindColors.sage
+                          : CuramindColors.mistBlue,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        entry.value,
+                        color: CuramindColors.ocean,
+                        size: 28,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        entry.key,
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          color: CuramindColors.inkMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
+    if (picked == null || !mounted) return;
+    setState(() => _avatarKey = picked);
   }
 
   Future<void> _logOut() async {
@@ -128,6 +263,22 @@ class _ProfilePageState extends State<ProfilePage> {
                 _ProfileHeader(
                   nameController: _nameController,
                   roleController: _roleController,
+                  avatarKey: _avatarKey,
+                  onPickAvatar: _pickAvatar,
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: _savingProfile ? null : _saveProfile,
+                  child: _savingProfile
+                      ? const SizedBox(
+                          height: 22,
+                          width: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.4,
+                            color: CuramindColors.white,
+                          ),
+                        )
+                      : const Text('Save profile'),
                 ),
                 const SizedBox(height: 36),
                 Text(
@@ -269,10 +420,14 @@ class _ProfileHeader extends StatelessWidget {
   const _ProfileHeader({
     required this.nameController,
     required this.roleController,
+    required this.avatarKey,
+    required this.onPickAvatar,
   });
 
   final TextEditingController nameController;
   final TextEditingController roleController;
+  final String avatarKey;
+  final VoidCallback onPickAvatar;
 
   @override
   Widget build(BuildContext context) {
@@ -287,21 +442,33 @@ class _ProfileHeader extends StatelessWidget {
             color: CuramindColors.mistBlue,
             border: Border.all(color: CuramindColors.slate, width: 1.4),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Stack(
             children: [
-              Icon(
-                Icons.person_outline_rounded,
-                size: 32,
-                color: CuramindColors.ocean,
+              Center(
+                child: Icon(
+                  _avatarChoices[avatarKey] ?? Icons.person_outline_rounded,
+                  size: 36,
+                  color: CuramindColors.ocean,
+                ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Photo',
-                style: GoogleFonts.outfit(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: CuramindColors.inkMuted,
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Material(
+                  color: CuramindColors.ocean,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: onPickAvatar,
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.photo_camera_outlined,
+                        size: 18,
+                        color: CuramindColors.white,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],

@@ -77,6 +77,32 @@ model MoodLog {
   created_at     DateTime @default(now())
 }
 
+enum DiaryEntryKind {
+  DBT_CARD
+  COPING
+}
+
+model DiaryEntry {
+  id               String         @id @default(uuid())
+  patient_id       String
+  kind             DiaryEntryKind
+  mood             Int?
+  affect_intensity Int?
+  urge_nssi        Int?
+  urge_substance   Int?
+  emotions         String[]
+  triggers         String[]
+  skills           String[]
+  notes            String?
+  situation        String?
+  thoughts         String?
+  behavior         String?
+  outcome          String?
+  created_at       DateTime       @default(now())
+
+  @@index([patient_id, created_at])
+}
+
 enum LinkStatus {
   PENDING
   ACTIVE

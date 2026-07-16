@@ -5,6 +5,7 @@ import cors from "cors";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
+import { diaryRouter } from "./routes/diary";
 import { linkRouter } from './routes/link';
 import { startCronJobs } from './jobs/dailyCheck';
 
@@ -23,6 +24,7 @@ app.use(express.json());
 app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "curamind-api" });
 });
+app.use("/api/diary", diaryRouter);
 app.use('/api/link', linkRouter);
 
 startCronJobs();

@@ -121,7 +121,7 @@ linkRouter.post("/groups", async (req: Request, res: Response) => {
 linkRouter.get("/groups/:psychiatristId", async (req: Request, res: Response) => {
   try {
     const groups = await prisma.joinGroup.findMany({
-      where: { psychiatrist_id: req.params.psychiatristId },
+      where: { psychiatrist_id: String(req.params.psychiatristId ?? "") },
       orderBy: { created_at: "desc" },
       include: { _count: { select: { care_links: true } } },
     });
@@ -141,7 +141,7 @@ linkRouter.patch("/groups/:groupId", async (req: Request, res: Response) => {
   }
   try {
     const group = await prisma.joinGroup.update({
-      where: { id: req.params.groupId },
+      where: { id: String(req.params.groupId ?? "") },
       data: { is_active },
       include: { _count: { select: { care_links: true } } },
     });
@@ -229,22 +229,25 @@ linkRouter.post("/join", async (req: Request, res: Response) => {
 linkRouter.get("/patient/:patientId", async (req: Request, res: Response) => {
   try {
     const link = await prisma.careLink.findUnique({
-      where: { patient_id: req.params.patientId },
-      include: { join_group: true },
+      where: { patient_id: String(req.params.patientId ?? "") },
     });
     if (!link) return res.json({ link: null });
+    const group = await prisma.joinGroup.findUnique({
+      where: { id: link.join_group_id },
+    });
+    if (!group) return res.json({ link: null });
     return res.json({
       link: {
         id: link.id,
         status: link.status,
         monitoring_on: link.monitoring_on,
         linked_at: link.created_at,
-        group_code: link.join_group.code,
-        group_name: link.join_group.name,
+        group_code: group.code,
+        group_name: group.name,
         psychiatrist: {
           id: link.psychiatrist_id,
-          full_name: link.join_group.psychiatrist_name ?? "Clinician",
-          email: link.join_group.psychiatrist_email ?? "",
+          full_name: group.psychiatrist_name ?? "Clinician",
+          email: group.psychiatrist_email ?? "",
         },
       },
     });
@@ -261,17 +264,19 @@ linkRouter.patch("/patient/:patientId/monitoring", async (req: Request, res: Res
   }
   try {
     const link = await prisma.careLink.update({
-      where: { patient_id: req.params.patientId },
+      where: { patient_id: String(req.params.patientId ?? "") },
       data: { monitoring_on },
-      include: { join_group: true },
+    });
+    const group = await prisma.joinGroup.findUnique({
+      where: { id: link.join_group_id },
     });
     return res.json({
       link: {
         id: link.id,
         status: link.status,
         monitoring_on: link.monitoring_on,
-        group_code: link.join_group.code,
-        group_name: link.join_group.name,
+        group_code: group?.code ?? "",
+        group_name: group?.name ?? "Care group",
       },
     });
   } catch (error) {
@@ -283,7 +288,7 @@ linkRouter.patch("/patient/:patientId/monitoring", async (req: Request, res: Res
 linkRouter.delete("/patient/:patientId", async (req: Request, res: Response) => {
   try {
     await prisma.careLink.delete({
-      where: { patient_id: req.params.patientId },
+      where: { patient_id: String(req.params.patientId ?? "") },
     });
     return res.json({ message: "Disconnected" });
   } catch (error) {

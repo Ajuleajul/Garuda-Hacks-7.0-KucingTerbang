@@ -11,12 +11,14 @@ class AuthUser {
     required this.email,
     required this.fullName,
     required this.role,
+    required this.avatarKey,
   });
 
   final String id;
   final String email;
   final String fullName;
   final String role;
+  final String avatarKey;
 
   static String normalizeRole(String? raw) {
     final r = (raw ?? '').trim().toUpperCase();
@@ -44,6 +46,7 @@ class AuthUser {
           ? meta['full_name'] as String
           : 'Unknown',
       role: normalized.isEmpty ? 'PATIENT' : normalized,
+      avatarKey: (meta['avatar_key'] as String?)?.trim() ?? 'person',
     );
   }
 
@@ -60,18 +63,20 @@ class AuthUser {
           json['full_name'] as String? ??
           'Unknown',
       role: normalized.isEmpty ? 'PATIENT' : normalized,
+      avatarKey: metaMap?['avatar_key'] as String? ?? 'person',
     );
   }
 
   bool get isPatient => role == 'PATIENT';
   bool get isPsychiatrist => role == 'PSYCHIATRIST';
 
-  AuthUser copyWith({String? role, String? fullName}) {
+  AuthUser copyWith({String? role, String? fullName, String? avatarKey}) {
     return AuthUser(
       id: id,
       email: email,
       fullName: fullName ?? this.fullName,
       role: role ?? this.role,
+      avatarKey: avatarKey ?? this.avatarKey,
     );
   }
 }
@@ -356,6 +361,59 @@ class AuthService {
       await _auth.updateUser(UserAttributes(password: newPassword));
     } on AuthFailure {
       rethrow;
+    } catch (e) {
+      throw AuthFailure(_friendlyError(e));
+    }
+  }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final user = _auth.currentUser;
+    final email = user?.email?.trim() ?? '';
+    if (email.isEmpty) {
+      throw AuthFailure('No signed-in user found.');
+    }
+    if (currentPassword.length < 6) {
+      throw AuthFailure('Current password is required.');
+    }
+    if (newPassword.length < 6) {
+      throw AuthFailure('New password must be at least 6 characters.');
+    }
+    if (currentPassword == newPassword) {
+      throw AuthFailure('New password must be different.');
+    }
+    try {
+      await _auth.signInWithPassword(
+        email: email,
+        password: currentPassword,
+      );
+      await _auth.updateUser(UserAttributes(password: newPassword));
+    } on AuthFailure {
+      rethrow;
+    } catch (e) {
+      throw AuthFailure(_friendlyError(e));
+    }
+  }
+
+  Future<AuthUser> updateProfile({
+    required String fullName,
+    required String avatarKey,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw AuthFailure('No signed-in user found.');
+    final nextName = fullName.trim();
+    if (nextName.isEmpty) {
+      throw AuthFailure('Name cannot be empty.');
+    }
+    final meta = Map<String, dynamic>.from(user.userMetadata ?? {});
+    meta['full_name'] = nextName;
+    meta['avatar_key'] = avatarKey.trim().isEmpty ? 'person' : avatarKey.trim();
+    try {
+      final updated = await _auth.updateUser(UserAttributes(data: meta));
+      final nextUser = updated.user ?? _auth.currentUser ?? user;
+      return resolveUser(nextUser);
     } catch (e) {
       throw AuthFailure(_friendlyError(e));
     }

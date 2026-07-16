@@ -29,6 +29,7 @@ class _DistressKitPageState extends State<DistressKitPage>
 
   int _groundStep = 0;
   final Set<int> _groundChecked = {};
+  final Map<int, TextEditingController> _groundTexts = {};
 
   final _warningSigns = TextEditingController();
   final _internalCoping = TextEditingController();
@@ -74,6 +75,10 @@ class _DistressKitPageState extends State<DistressKitPage>
       count: 1,
     ),
   ];
+
+  TextEditingController _groundCtrl(int key) {
+    return _groundTexts.putIfAbsent(key, TextEditingController.new);
+  }
 
   @override
   void initState() {
@@ -136,6 +141,9 @@ class _DistressKitPageState extends State<DistressKitPage>
     _breathController
       ..removeStatusListener(_onBreathStatus)
       ..dispose();
+    for (final c in _groundTexts.values) {
+      c.dispose();
+    }
     _warningSigns.dispose();
     _internalCoping.dispose();
     _socialDistraction.dispose();
@@ -224,6 +232,7 @@ class _DistressKitPageState extends State<DistressKitPage>
                 steps: _groundingSteps,
                 stepIndex: _groundStep,
                 checked: _groundChecked,
+                controllerFor: _groundCtrl,
                 onStepChanged: (i) => setState(() => _groundStep = i),
                 onToggleCheck: (key) {
                   setState(() {
@@ -234,6 +243,7 @@ class _DistressKitPageState extends State<DistressKitPage>
                     }
                   });
                 },
+                onTextChanged: (_) => setState(() {}),
               ),
               _SafetyPlanTab(
                 warningSigns: _warningSigns,
@@ -453,15 +463,19 @@ class _GroundingTab extends StatelessWidget {
     required this.steps,
     required this.stepIndex,
     required this.checked,
+    required this.controllerFor,
     required this.onStepChanged,
     required this.onToggleCheck,
+    required this.onTextChanged,
   });
 
   final List<_GroundStep> steps;
   final int stepIndex;
   final Set<int> checked;
+  final TextEditingController Function(int key) controllerFor;
   final ValueChanged<int> onStepChanged;
   final ValueChanged<int> onToggleCheck;
+  final ValueChanged<int> onTextChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -481,7 +495,7 @@ class _GroundingTab extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Bring attention back to the present, one sense at a time.',
+            'Write what you notice for each sense, then tap the circle to check it off.',
             style: GoogleFonts.outfit(
               fontSize: 14,
               color: CuramindColors.inkMuted,
@@ -556,52 +570,72 @@ class _GroundingTab extends StatelessWidget {
                 ...List.generate(step.count, (j) {
                   final key = stepIndex * 10 + j;
                   final isOn = checked.contains(key);
+                  final ctrl = controllerFor(key);
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () => onToggleCheck(key),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isOn
-                                ? CuramindColors.sageSoft.withValues(alpha: 0.7)
-                                : CuramindColors.surface,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: IconButton(
+                            onPressed: () => onToggleCheck(key),
+                            tooltip: isOn ? 'Uncheck' : 'Check off',
+                            icon: Icon(
+                              isOn
+                                  ? Icons.check_circle_rounded
+                                  : Icons.circle_outlined,
                               color: isOn
-                                  ? CuramindColors.sage
-                                  : CuramindColors.mistBlue,
+                                  ? CuramindColors.sageDeep
+                                  : CuramindColors.inkMuted,
+                              size: 26,
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                isOn
-                                    ? Icons.check_circle_rounded
-                                    : Icons.circle_outlined,
-                                color: isOn
-                                    ? CuramindColors.sageDeep
-                                    : CuramindColors.inkMuted,
-                                size: 22,
-                              ),
-                              const SizedBox(width: 10),
-                              Text(
-                                'Item ${j + 1}',
-                                style: GoogleFonts.outfit(
-                                  fontWeight: FontWeight.w500,
-                                  color: CuramindColors.ink,
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: ctrl,
+                            textCapitalization: TextCapitalization.sentences,
+                            onChanged: (_) => onTextChanged(key),
+                            decoration: InputDecoration(
+                              hintText: 'What do you notice? (#${j + 1})',
+                              filled: true,
+                              fillColor: isOn
+                                  ? CuramindColors.sageSoft
+                                      .withValues(alpha: 0.45)
+                                  : CuramindColors.surface,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: isOn
+                                      ? CuramindColors.sage
+                                      : CuramindColors.mistBlue,
                                 ),
                               ),
-                            ],
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: isOn
+                                      ? CuramindColors.sage
+                                      : CuramindColors.mistBlue,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                  color: CuramindColors.ocean,
+                                  width: 1.4,
+                                ),
+                              ),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
                   );
                 }),
@@ -682,7 +716,7 @@ class _SafetyPlanTab extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Work through each step when risk rises. Edit freely — this stays on your device for now.',
+            'Work through each step when risk rises. Tap the pen icon to edit a step.',
             style: GoogleFonts.outfit(
               fontSize: 14,
               height: 1.4,
@@ -741,7 +775,7 @@ class _SafetyPlanTab extends StatelessWidget {
   }
 }
 
-class _SpiStep extends StatelessWidget {
+class _SpiStep extends StatefulWidget {
   const _SpiStep({
     required this.step,
     required this.title,
@@ -753,7 +787,15 @@ class _SpiStep extends StatelessWidget {
   final TextEditingController controller;
 
   @override
+  State<_SpiStep> createState() => _SpiStepState();
+}
+
+class _SpiStepState extends State<_SpiStep> {
+  bool _editing = false;
+
+  @override
   Widget build(BuildContext context) {
+    final text = widget.controller.text.trim();
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Container(
@@ -766,34 +808,75 @@ class _SpiStep extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Step $step',
-              style: GoogleFonts.outfit(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
-                color: CuramindColors.slate,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              title,
-              style: GoogleFonts.outfit(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: CuramindColors.ink,
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Step ${widget.step}',
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                          color: CuramindColors.slate,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.title,
+                        style: GoogleFonts.outfit(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: CuramindColors.ink,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: _editing ? 'Done' : 'Edit',
+                  onPressed: () {
+                    setState(() => _editing = !_editing);
+                    if (!_editing) {
+                      FocusScope.of(context).unfocus();
+                    }
+                  },
+                  icon: Icon(
+                    _editing ? Icons.check_rounded : Icons.edit_outlined,
+                    color: CuramindColors.ocean,
+                    size: 22,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
-            TextField(
-              controller: controller,
-              maxLines: 3,
-              minLines: 2,
-              decoration: const InputDecoration(
-                hintText: 'Write your plan here…',
-                isDense: true,
+            if (_editing)
+              TextField(
+                controller: widget.controller,
+                maxLines: 4,
+                minLines: 2,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'Write your plan here…',
+                  isDense: true,
+                ),
+              )
+            else
+              Text(
+                text.isEmpty ? 'Tap the pen to add your plan.' : text,
+                style: GoogleFonts.outfit(
+                  fontSize: 14,
+                  height: 1.45,
+                  color: text.isEmpty
+                      ? CuramindColors.inkMuted
+                      : CuramindColors.ink,
+                  fontStyle:
+                      text.isEmpty ? FontStyle.italic : FontStyle.normal,
+                ),
               ),
-            ),
           ],
         ),
       ),

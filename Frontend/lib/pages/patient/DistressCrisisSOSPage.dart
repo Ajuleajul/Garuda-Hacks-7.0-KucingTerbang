@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../theme/curamind_theme.dart';
 
-/// Extreme crisis mode — low contrast, no auto-dial.
-/// Open via [DistressCrisisSOSPage.open] so Home SOS never jumps to the phone.
 class DistressCrisisSOSPage extends StatefulWidget {
   const DistressCrisisSOSPage({super.key});
 
@@ -37,17 +36,21 @@ class DistressCrisisSOSPage extends StatefulWidget {
 
 class _DistressCrisisSOSPageState extends State<DistressCrisisSOSPage>
     with SingleTickerProviderStateMixin {
+  static const _prefsNameKey = 'curamind_safe_person_name';
+  static const _prefsPhoneKey = 'curamind_safe_person_phone';
+
   late final AnimationController _pulse;
   late final Animation<double> _scale;
+  late final TextEditingController _safeNameController;
+  late final TextEditingController _safePhoneController;
 
   bool _showBreath = false;
   bool _showGround = false;
   bool _showSafePerson = false;
+  bool _editingSafePerson = false;
+  bool _savingContact = false;
   int _groundTick = 0;
 
-  // Soft demo contacts — replace with Safety Plan data later
-  static const _safeName = 'Maya (trusted person)';
-  static const _safePhone = '+62 812 0000 0000';
   static const _crisisLine = 'Local crisis line';
   static const _crisisPhone = '119 (or your local number)';
   static const _emergencyLabel = 'Emergency services';
@@ -56,6 +59,8 @@ class _DistressCrisisSOSPageState extends State<DistressCrisisSOSPage>
   @override
   void initState() {
     super.initState();
+    _safeNameController = TextEditingController(text: 'Maya (trusted person)');
+    _safePhoneController = TextEditingController(text: '+62 812 0000 0000');
     _pulse = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 4800),
@@ -63,11 +68,69 @@ class _DistressCrisisSOSPageState extends State<DistressCrisisSOSPage>
     _scale = Tween<double>(begin: 0.92, end: 1.04).animate(
       CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
     );
+    _loadSafePerson();
+  }
+
+  Future<void> _loadSafePerson() async {
+    final prefs = await SharedPreferences.getInstance();
+    final name = prefs.getString(_prefsNameKey);
+    final phone = prefs.getString(_prefsPhoneKey);
+    if (!mounted) return;
+    setState(() {
+      if (name != null && name.trim().isNotEmpty) {
+        _safeNameController.text = name.trim();
+      }
+      if (phone != null && phone.trim().isNotEmpty) {
+        _safePhoneController.text = phone.trim();
+      }
+    });
+  }
+
+  Future<void> _saveSafePerson() async {
+    final name = _safeNameController.text.trim();
+    final phone = _safePhoneController.text.trim();
+    if (name.isEmpty || phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: CuramindColors.danger,
+          content: Text(
+            'Name and number are both required.',
+            style: GoogleFonts.outfit(color: CuramindColors.white),
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _savingContact = true);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsNameKey, name);
+    await prefs.setString(_prefsPhoneKey, phone);
+    if (!mounted) return;
+    setState(() {
+      _savingContact = false;
+      _editingSafePerson = false;
+      _safeNameController.text = name;
+      _safePhoneController.text = phone;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: CuramindColors.sageDeep,
+        content: Text(
+          'Safe person saved.',
+          style: GoogleFonts.outfit(color: CuramindColors.white),
+        ),
+      ),
+    );
   }
 
   @override
   void dispose() {
     _pulse.dispose();
+    _safeNameController.dispose();
+    _safePhoneController.dispose();
     super.dispose();
   }
 
@@ -146,7 +209,8 @@ class _DistressCrisisSOSPageState extends State<DistressCrisisSOSPage>
       builder: (ctx) {
         return AlertDialog(
           backgroundColor: const Color(0xFFF2F6F7),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text(
             _emergencyLabel,
             style: GoogleFonts.fraunces(
@@ -210,7 +274,6 @@ class _DistressCrisisSOSPageState extends State<DistressCrisisSOSPage>
 
   @override
   Widget build(BuildContext context) {
-    // Soft, low-contrast palette — avoid bright red / high arousal
     const bg = Color(0xFFE4EBED);
     final inkSoft = CuramindColors.ink.withValues(alpha: 0.72);
     final muted = CuramindColors.inkMuted.withValues(alpha: 0.9);
@@ -365,38 +428,94 @@ class _DistressCrisisSOSPageState extends State<DistressCrisisSOSPage>
                     title: 'Reach a safe person',
                     subtitle: 'Shows a contact. You choose if and when to call.',
                     expanded: _showSafePerson,
-                    onTap: () => setState(() => _showSafePerson = !_showSafePerson),
+                    onTap: () =>
+                        setState(() => _showSafePerson = !_showSafePerson),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(
-                          _safeName,
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: inkSoft,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        SelectableText(
-                          _safePhone,
-                          style: GoogleFonts.outfit(
-                            fontSize: 18,
-                            color: CuramindColors.ocean,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        OutlinedButton(
-                          onPressed: () => _copy('Safe person number', _safePhone),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: CuramindColors.ocean,
-                            side: BorderSide(
-                              color: CuramindColors.slate.withValues(alpha: 0.45),
+                        if (_editingSafePerson) ...[
+                          TextField(
+                            controller: _safeNameController,
+                            textCapitalization: TextCapitalization.words,
+                            decoration: const InputDecoration(
+                              labelText: 'Name',
+                              hintText: 'e.g. Maya · Sister',
                             ),
-                            minimumSize: const Size.fromHeight(46),
                           ),
-                          child: const Text('Copy number'),
-                        ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: _safePhoneController,
+                            keyboardType: TextInputType.phone,
+                            decoration: const InputDecoration(
+                              labelText: 'Phone number',
+                              hintText: 'e.g. +62 812 0000 0000',
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FilledButton(
+                            onPressed: _savingContact ? null : _saveSafePerson,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: CuramindColors.ocean,
+                              foregroundColor: CuramindColors.white,
+                              minimumSize: const Size.fromHeight(46),
+                            ),
+                            child: _savingContact
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.2,
+                                      color: CuramindColors.white,
+                                    ),
+                                  )
+                                : const Text('Save contact'),
+                          ),
+                          const SizedBox(height: 6),
+                          TextButton(
+                            onPressed: () =>
+                                setState(() => _editingSafePerson = false),
+                            child: const Text('Cancel'),
+                          ),
+                        ] else ...[
+                          Text(
+                            _safeNameController.text,
+                            style: GoogleFonts.outfit(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: inkSoft,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          SelectableText(
+                            _safePhoneController.text,
+                            style: GoogleFonts.outfit(
+                              fontSize: 18,
+                              color: CuramindColors.ocean,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton(
+                            onPressed: () => _copy(
+                              'Safe person number',
+                              _safePhoneController.text,
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: CuramindColors.ocean,
+                              side: BorderSide(
+                                color: CuramindColors.slate
+                                    .withValues(alpha: 0.45),
+                              ),
+                              minimumSize: const Size.fromHeight(46),
+                            ),
+                            child: const Text('Copy number'),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: () =>
+                                setState(() => _editingSafePerson = true),
+                            child: const Text('Edit name & number'),
+                          ),
+                        ],
                         const SizedBox(height: 8),
                         Text(
                           '$_crisisLine · $_crisisPhone',
