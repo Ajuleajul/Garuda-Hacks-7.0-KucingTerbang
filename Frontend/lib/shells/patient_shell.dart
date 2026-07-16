@@ -5,9 +5,10 @@ import '../pages/patient/AuthPage.dart';
 import '../pages/patient/ClinicianLinkPage.dart';
 import '../pages/patient/DistressKitPage.dart';
 import '../pages/patient/EMADiaryPage.dart';
+import '../pages/patient/MedicationViewPage.dart';
+import '../pages/patient/PersonalDashboardPage.dart';
 import '../pages/patient/ProfilePage.dart';
 import '../theme/curamind_theme.dart';
-import '../widgets/coming_soon_page.dart';
 import '../widgets/curamind_app_header.dart';
 
 class PatientShell extends StatefulWidget {
@@ -52,17 +53,9 @@ class _PatientShellState extends State<PatientShell> {
     _pages = [
       _PatientHomeBody(name: widget.displayName),
       const EMADiaryPage(embedded: true),
-      const ComingSoonPage(
-        title: 'Medications',
-        subtitle: 'Reminders and adherence logging coming next.',
-        icon: Icons.medication_outlined,
-      ),
+      const MedicationViewPage(embedded: true),
       const DistressKitPage(embedded: true),
-      const ComingSoonPage(
-        title: 'Personal Dashboard',
-        subtitle: 'Dual mood × adherence chart coming next.',
-        icon: Icons.show_chart_outlined,
-      ),
+      const PersonalDashboardPage(embedded: true),
       const ClinicianLinkPage(embedded: true),
       ProfilePage(
         name: widget.displayName,
