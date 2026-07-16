@@ -5,7 +5,12 @@ import '../../animated_cursor.dart';
 import '../../theme/curamind_theme.dart';
 
 class ExportClinicalReportPage extends StatefulWidget {
-  const ExportClinicalReportPage({super.key});
+  const ExportClinicalReportPage({
+    super.key,
+    this.embedded = false,
+  });
+
+  final bool embedded;
 
   @override
   State<ExportClinicalReportPage> createState() =>

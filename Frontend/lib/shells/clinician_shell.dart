@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../pages/patient/AuthGate.dart';
+import '../pages/psychiatrist/HomePage.dart';
 import '../pages/psychiatrist/PatientMonitoringDashboard.dart';
 import '../pages/psychiatrist/ProfilePage.dart';
 import '../pages/psychiatrist/DualBivariateDashboard.dart';
@@ -21,6 +22,7 @@ class ClinicianShell extends StatefulWidget {
   final int initialIndex;
 
   static const destinations = [
+    NavDestination(label: 'Home', icon: Icons.home_outlined),
     NavDestination(label: 'Monitor', icon: Icons.monitor_heart_outlined),
     NavDestination(label: 'Dual Chart', icon: Icons.stacked_line_chart),
     NavDestination(label: 'Prescribe', icon: Icons.medication_liquid_outlined),
@@ -52,11 +54,15 @@ class _ClinicianShellState extends State<ClinicianShell> {
     _index =
         widget.initialIndex.clamp(0, ClinicianShell.destinations.length - 1);
     _pages = [
-      const PatientMonitoringDashboard(),
-      const DualBivariateDashboard(),
-      const MedicationPrescriptionInputPage(),
-      const MedicationManagementPage(),
-      const ExportClinicalReportPage(),
+      ClinicianHomePage(
+        displayName: widget.displayName,
+        onNavigate: _go,
+      ),
+      const PatientMonitoringDashboard(embedded: true),
+      const DualBivariateDashboard(embedded: true),
+      const MedicationPrescriptionInputPage(embedded: true),
+      const MedicationManagementPage(embedded: true),
+      const ExportClinicalReportPage(embedded: true),
       ProfilePage(
         name: widget.displayName,
         role: 'Psychiatrist',

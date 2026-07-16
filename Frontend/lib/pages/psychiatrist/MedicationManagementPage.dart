@@ -5,7 +5,12 @@ import '../../animated_cursor.dart';
 import '../../theme/curamind_theme.dart';
 
 class MedicationManagementPage extends StatelessWidget {
-  const MedicationManagementPage({super.key});
+  const MedicationManagementPage({
+    super.key,
+    this.embedded = false,
+  });
+
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {

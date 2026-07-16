@@ -5,7 +5,12 @@ import '../../animated_cursor.dart';
 import '../../theme/curamind_theme.dart';
 
 class MedicationPrescriptionInputPage extends StatefulWidget {
-  const MedicationPrescriptionInputPage({super.key});
+  const MedicationPrescriptionInputPage({
+    super.key,
+    this.embedded = false,
+  });
+
+  final bool embedded;
 
   @override
   State<MedicationPrescriptionInputPage> createState() =>

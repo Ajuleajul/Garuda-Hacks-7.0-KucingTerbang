@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'dart:math' as math;
 
 import '../../animated_cursor.dart';
 import '../../theme/curamind_theme.dart';
 
 class DualBivariateDashboard extends StatefulWidget {
-  const DualBivariateDashboard({super.key});
+  const DualBivariateDashboard({
+    super.key,
+    this.embedded = false,
+  });
+
+  final bool embedded;
 
   @override
   State<DualBivariateDashboard> createState() => _DualBivariateDashboardState();

@@ -102,162 +102,168 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
-    return Scaffold(
-      backgroundColor: CuramindColors.mist,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          const _ProfileAtmosphere(),
-          SafeArea(
-            child: AnimatedPadding(
-              duration: const Duration(milliseconds: 200),
-              padding: EdgeInsets.only(bottom: bottomInset > 0 ? 8 : 0),
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 440),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (!widget.embedded) ...[
-                          Text(
-                            'Profile',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.fraunces(
-                              fontSize: 32,
-                              fontWeight: FontWeight.w600,
-                              color: CuramindColors.ink,
-                            ),
-                          ),
-                          const SizedBox(height: 28),
-                        ],
-                        _ProfileHeader(
-                          nameController: _nameController,
-                          roleController: _roleController,
-                        ),
-                        const SizedBox(height: 36),
+    final body = Stack(
+      fit: StackFit.expand,
+      children: [
+        const _ProfileAtmosphere(),
+        SafeArea(
+          child: AnimatedPadding(
+            duration: const Duration(milliseconds: 200),
+            padding: EdgeInsets.only(bottom: bottomInset > 0 ? 8 : 0),
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (!widget.embedded) ...[
                         Text(
-                          'Change Password',
+                          'Profile',
                           textAlign: TextAlign.center,
-                          style: GoogleFonts.outfit(
-                            fontSize: 18,
+                          style: GoogleFonts.fraunces(
+                            fontSize: 32,
                             fontWeight: FontWeight.w600,
                             color: CuramindColors.ink,
                           ),
                         ),
-                        const SizedBox(height: 18),
-                        Form(
-                          key: _formKey,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _PasswordField(
-                                label: 'Current Password',
-                                controller: _currentPasswordController,
-                                obscure: _obscureCurrent,
-                                onToggleObscure: () => setState(
-                                  () => _obscureCurrent = !_obscureCurrent,
-                                ),
-                                textInputAction: TextInputAction.next,
-                                validator: (v) {
-                                  if (v == null || v.isEmpty) {
-                                    return 'Current password is required';
-                                  }
-                                  if (v.length < 6) {
-                                    return 'Password must be at least 6 characters';
-                                  }
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 14),
-                              _PasswordField(
-                                label: 'New Password',
-                                controller: _newPasswordController,
-                                obscure: _obscureNew,
-                                onToggleObscure: () => setState(
-                                  () => _obscureNew = !_obscureNew,
-                                ),
-                                textInputAction: TextInputAction.next,
-                                validator: (v) {
-                                  if (v == null || v.length < 6) {
-                                    return 'New password must be at least 6 characters';
-                                  }
-                                  if (v == _currentPasswordController.text) {
-                                    return 'New password must be different';
-                                  }
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 14),
-                              _PasswordField(
-                                label: 'Re-confirm Password',
-                                controller: _confirmPasswordController,
-                                obscure: _obscureConfirm,
-                                onToggleObscure: () => setState(
-                                  () => _obscureConfirm = !_obscureConfirm,
-                                ),
-                                textInputAction: TextInputAction.done,
-                                onFieldSubmitted: (_) => _updatePassword(),
-                                validator: (v) {
-                                  if (v != _newPasswordController.text) {
-                                    return 'Passwords do not match';
-                                  }
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 18),
-                              FilledButton(
-                                onPressed:
-                                    _savingPassword ? null : _updatePassword,
-                                child: _savingPassword
-                                    ? const SizedBox(
-                                        height: 22,
-                                        width: 22,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2.4,
-                                          color: CuramindColors.white,
-                                        ),
-                                      )
-                                    : const Text('Update password'),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 40),
-                        Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 200),
-                            child: OutlinedButton(
-                              onPressed: _logOut,
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: CuramindColors.ocean,
-                                side: const BorderSide(
-                                  color: CuramindColors.slate,
-                                  width: 1.4,
-                                ),
-                                minimumSize: const Size.fromHeight(48),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                textStyle: GoogleFonts.outfit(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              child: const Text('Log out'),
-                            ),
-                          ),
-                        ),
+                        const SizedBox(height: 28),
                       ],
-                    ),
+                      _ProfileHeader(
+                        nameController: _nameController,
+                        roleController: _roleController,
+                      ),
+                      const SizedBox(height: 36),
+                      Text(
+                        'Change Password',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: CuramindColors.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _PasswordField(
+                              label: 'Current Password',
+                              controller: _currentPasswordController,
+                              obscure: _obscureCurrent,
+                              onToggleObscure: () => setState(
+                                () => _obscureCurrent = !_obscureCurrent,
+                              ),
+                              textInputAction: TextInputAction.next,
+                              validator: (v) {
+                                if (v == null || v.isEmpty) {
+                                  return 'Current password is required';
+                                }
+                                if (v.length < 6) {
+                                  return 'Password must be at least 6 characters';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 14),
+                            _PasswordField(
+                              label: 'New Password',
+                              controller: _newPasswordController,
+                              obscure: _obscureNew,
+                              onToggleObscure: () => setState(
+                                () => _obscureNew = !_obscureNew,
+                              ),
+                              textInputAction: TextInputAction.next,
+                              validator: (v) {
+                                if (v == null || v.length < 6) {
+                                  return 'New password must be at least 6 characters';
+                                }
+                                if (v == _currentPasswordController.text) {
+                                  return 'New password must be different';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 14),
+                            _PasswordField(
+                              label: 'Re-confirm Password',
+                              controller: _confirmPasswordController,
+                              obscure: _obscureConfirm,
+                              onToggleObscure: () => setState(
+                                () => _obscureConfirm = !_obscureConfirm,
+                              ),
+                              textInputAction: TextInputAction.done,
+                              onFieldSubmitted: (_) => _updatePassword(),
+                              validator: (v) {
+                                if (v != _newPasswordController.text) {
+                                  return 'Passwords do not match';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 18),
+                            FilledButton(
+                              onPressed:
+                                  _savingPassword ? null : _updatePassword,
+                              child: _savingPassword
+                                  ? const SizedBox(
+                                      height: 22,
+                                      width: 22,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.4,
+                                        color: CuramindColors.white,
+                                      ),
+                                    )
+                                  : const Text('Update password'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+                      Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 200),
+                          child: OutlinedButton(
+                            onPressed: _logOut,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: CuramindColors.ocean,
+                              side: const BorderSide(
+                                color: CuramindColors.slate,
+                                width: 1.4,
+                              ),
+                              minimumSize: const Size.fromHeight(48),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              textStyle: GoogleFonts.outfit(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            child: const Text('Log out'),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+
+    if (widget.embedded) {
+      return ColoredBox(color: CuramindColors.mist, child: body);
+    }
+
+    return Scaffold(
+      backgroundColor: CuramindColors.mist,
+      body: body,
     );
   }
 }

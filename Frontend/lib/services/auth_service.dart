@@ -18,33 +18,62 @@ class AuthUser {
   final String fullName;
   final String role;
 
-  factory AuthUser.fromUser(User user) {
+  static String normalizeRole(String? raw) {
+    final r = (raw ?? '').trim().toUpperCase();
+    if (r == 'PSYCHIATRIST' ||
+        r == 'PSIKIATER' ||
+        r == 'CLINICIAN' ||
+        r == 'DOCTOR') {
+      return 'PSYCHIATRIST';
+    }
+    if (r == 'PATIENT' || r == 'PASIEN') return 'PATIENT';
+    return r.isEmpty ? '' : r;
+  }
+
+  factory AuthUser.fromUser(User user, {String? fallbackRole}) {
     final meta = user.userMetadata ?? {};
+    final appMeta = user.appMetadata;
+    final raw = meta['role'] as String? ??
+        appMeta['role'] as String? ??
+        fallbackRole;
+    final normalized = normalizeRole(raw);
     return AuthUser(
       id: user.id,
       email: user.email ?? '',
       fullName: (meta['full_name'] as String?)?.trim().isNotEmpty == true
           ? meta['full_name'] as String
           : 'Unknown',
-      role: (meta['role'] as String?) ?? 'PATIENT',
+      role: normalized.isEmpty ? 'PATIENT' : normalized,
     );
   }
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
     final meta = json['user_metadata'];
     final metaMap = meta is Map ? Map<String, dynamic>.from(meta) : null;
+    final normalized = normalizeRole(
+      metaMap?['role'] as String? ?? json['role'] as String?,
+    );
     return AuthUser(
       id: json['id'] as String? ?? json['sub'] as String? ?? '',
       email: json['email'] as String? ?? '',
       fullName: metaMap?['full_name'] as String? ??
           json['full_name'] as String? ??
           'Unknown',
-      role: metaMap?['role'] as String? ?? json['role'] as String? ?? 'PATIENT',
+      role: normalized.isEmpty ? 'PATIENT' : normalized,
     );
   }
 
   bool get isPatient => role == 'PATIENT';
   bool get isPsychiatrist => role == 'PSYCHIATRIST';
+
+  AuthUser copyWith({String? role, String? fullName}) {
+    return AuthUser(
+      id: id,
+      email: email,
+      fullName: fullName ?? this.fullName,
+      role: role ?? this.role,
+    );
+  }
 }
 
 class AuthResult {
@@ -110,6 +139,60 @@ class AuthService {
     await prefs.setString(persistSessionKey, jsonEncode(session.toJson()));
   }
 
+  Future<void> saveLocalRole(String userId, String role) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('curamind_role_$userId', normalizeStoredRole(role));
+  }
+
+  Future<String?> loadLocalRole(String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return AuthUser.normalizeRole(prefs.getString('curamind_role_$userId'));
+  }
+
+  static String normalizeStoredRole(String role) {
+    final n = AuthUser.normalizeRole(role);
+    return n.isEmpty ? 'PATIENT' : n;
+  }
+
+  /// Resolves role from metadata, then local backup (for cold start).
+  Future<AuthUser> resolveUser(User user) async {
+    final metaRole = AuthUser.normalizeRole(
+      user.userMetadata?['role'] as String? ??
+          user.appMetadata['role'] as String?,
+    );
+    if (metaRole == 'PSYCHIATRIST' || metaRole == 'PATIENT') {
+      return AuthUser.fromUser(user, fallbackRole: metaRole);
+    }
+    final local = await loadLocalRole(user.id);
+    if (local != null && local.isNotEmpty) {
+      return AuthUser.fromUser(user, fallbackRole: local);
+    }
+    return AuthUser.fromUser(user);
+  }
+
+  Future<User> _stampRoleMetadata({
+    required User user,
+    required String role,
+    required String fullName,
+  }) async {
+    final normalized = normalizeStoredRole(role);
+    final meta = Map<String, dynamic>.from(user.userMetadata ?? {});
+    final current = AuthUser.normalizeRole(meta['role'] as String?);
+    if (current == normalized &&
+        (meta['full_name'] as String?)?.trim().isNotEmpty == true) {
+      await saveLocalRole(user.id, normalized);
+      return user;
+    }
+    meta['role'] = normalized;
+    meta['full_name'] = fullName.trim().isNotEmpty
+        ? fullName.trim()
+        : (meta['full_name'] as String? ?? 'User');
+    final updated = await _auth.updateUser(UserAttributes(data: meta));
+    final next = updated.user ?? _auth.currentUser ?? user;
+    await saveLocalRole(next.id, normalized);
+    return next;
+  }
+
   /// Re-apply any stored session after [Supabase.initialize] (awaited).
   Future<Session?> restorePersistedSession() async {
     final existing = _auth.currentSession;
@@ -153,15 +236,21 @@ class AuthService {
       }
 
       if (res.session == null) {
+        await saveLocalRole(user.id, role);
         return SignUpNeedsVerification(email: trimmedEmail);
       }
 
+      final stamped = await _stampRoleMetadata(
+        user: user,
+        role: role,
+        fullName: fullName,
+      );
       await persistSession(res.session!);
 
       return SignUpSignedIn(
         AuthResult(
           token: res.session!.accessToken,
-          user: AuthUser.fromUser(user),
+          user: await resolveUser(stamped),
         ),
       );
     } on AuthFailure {
@@ -189,10 +278,26 @@ class AuthService {
         throw AuthFailure('Sign in failed. Check your email and password.');
       }
 
-      final authUser = AuthUser.fromUser(user);
-      if (role != null &&
-          authUser.role.isNotEmpty &&
-          authUser.role != role) {
+      var authUser = await resolveUser(user);
+
+      if (role == 'PSYCHIATRIST' && !authUser.isPsychiatrist) {
+        final raw = AuthUser.normalizeRole(
+          user.userMetadata?['role'] as String?,
+        );
+        final local = await loadLocalRole(user.id);
+        if (raw.isEmpty || local == 'PSYCHIATRIST') {
+          final stamped = await _stampRoleMetadata(
+            user: user,
+            role: 'PSYCHIATRIST',
+            fullName: authUser.fullName == 'Unknown'
+                ? (user.email ?? 'Clinician')
+                : authUser.fullName,
+          );
+          authUser = await resolveUser(stamped);
+        }
+      }
+
+      if (role != null && authUser.role != role) {
         await _auth.signOut();
         throw AuthFailure(
           role == 'PSYCHIATRIST'
@@ -201,6 +306,7 @@ class AuthService {
         );
       }
 
+      await saveLocalRole(authUser.id, authUser.role);
       await persistSession(session);
 
       return AuthResult(
@@ -260,7 +366,7 @@ class AuthService {
   Future<AuthUser?> getSavedUser() async {
     final user = _auth.currentUser;
     if (user == null) return null;
-    return AuthUser.fromUser(user);
+    return resolveUser(user);
   }
 
   AuthUser? get currentUser {
@@ -269,14 +375,25 @@ class AuthService {
     return AuthUser.fromUser(user);
   }
 
+  Future<AuthUser?> resolveCurrentUser() async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    return resolveUser(user);
+  }
+
   Session? get currentSession => _auth.currentSession;
 
   Stream<AuthState> get onAuthStateChange => _auth.onAuthStateChange;
 
   Future<void> logout() async {
+    final user = _auth.currentUser;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(persistSessionKey);
+    // Keep curamind_role_* so role survives re-login if metadata is flaky.
     await _auth.signOut();
+    if (user != null) {
+      // no-op placeholder — role backup retained on purpose
+    }
   }
 
   String _friendlyError(Object e) {

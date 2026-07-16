@@ -58,7 +58,12 @@ final List<MockPatient> _mockPatients = [
 ];
 
 class PatientMonitoringDashboard extends StatelessWidget {
-  const PatientMonitoringDashboard({super.key});
+  const PatientMonitoringDashboard({
+    super.key,
+    this.embedded = false,
+  });
+
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
@@ -72,51 +77,55 @@ class PatientMonitoringDashboard extends StatelessWidget {
       crossAxisCount = 2;
     }
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Active Patients',
-                style: GoogleFonts.fraunces(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w600,
-                  color: CuramindColors.ink,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Monitor adherence and recent DBT diary trends.',
-                style: GoogleFonts.outfit(
-                  fontSize: 15,
-                  color: CuramindColors.inkMuted,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Expanded(
-                child: GridView.builder(
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                    childAspectRatio: 1.15,
-                  ),
-                  itemCount: _mockPatients.length,
-                  itemBuilder: (context, index) {
-                    final patient = _mockPatients[index];
-                    return _PatientCard(patient: patient);
-                  },
-                ),
-              ),
-            ],
+    final content = Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Active Patients',
+            style: GoogleFonts.fraunces(
+              fontSize: 28,
+              fontWeight: FontWeight.w600,
+              color: CuramindColors.ink,
+              letterSpacing: -0.5,
+            ),
           ),
-        ),
+          const SizedBox(height: 6),
+          Text(
+            'Monitor adherence and recent DBT diary trends.',
+            style: GoogleFonts.outfit(
+              fontSize: 15,
+              color: CuramindColors.inkMuted,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Expanded(
+            child: GridView.builder(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 1.15,
+              ),
+              itemCount: _mockPatients.length,
+              itemBuilder: (context, index) {
+                final patient = _mockPatients[index];
+                return _PatientCard(patient: patient);
+              },
+            ),
+          ),
+        ],
       ),
+    );
+
+    if (embedded) {
+      return ColoredBox(color: CuramindColors.mist, child: content);
+    }
+
+    return Scaffold(
+      backgroundColor: CuramindColors.mist,
+      body: SafeArea(child: content),
     );
   }
 }

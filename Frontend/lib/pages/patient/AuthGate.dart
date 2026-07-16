@@ -28,19 +28,8 @@ class _AuthGateState extends State<AuthGate> {
   @override
   void initState() {
     super.initState();
-    _applyFromClient();
+    unawaited(_hydrate());
     _sub = AuthService.instance.onAuthStateChange.listen(_onAuthState);
-
-    // Catch late recoverSession() completion from supabase_flutter.
-    Future<void>.delayed(const Duration(milliseconds: 400), () {
-      if (!mounted) return;
-      final session = AuthService.instance.currentSession;
-      if (session != null && _user == null) {
-        _applySession(session);
-      } else if (!_ready) {
-        setState(() => _ready = true);
-      }
-    });
   }
 
   @override
@@ -49,24 +38,40 @@ class _AuthGateState extends State<AuthGate> {
     super.dispose();
   }
 
-  void _applyFromClient() {
+  Future<void> _hydrate() async {
     final session = AuthService.instance.currentSession;
-    final user = AuthService.instance.currentUser;
+    if (session == null) {
+      if (!mounted) return;
+      setState(() {
+        _ready = true;
+        _passwordRecovery = false;
+        _user = null;
+      });
+      return;
+    }
+    final user = await AuthService.instance.resolveCurrentUser();
+    if (!mounted) return;
     setState(() {
       _ready = true;
       _passwordRecovery = false;
-      _user = session != null ? user : null;
+      _user = user;
     });
   }
 
-  void _applySession(Session? session) {
+  Future<void> _applySession(Session? session) async {
+    if (session == null) {
+      if (!mounted) return;
+      setState(() {
+        _ready = true;
+        if (!_passwordRecovery) _user = null;
+      });
+      return;
+    }
+    final user = await AuthService.instance.resolveUser(session.user);
+    if (!mounted) return;
     setState(() {
       _ready = true;
-      if (session == null) {
-        if (!_passwordRecovery) _user = null;
-      } else {
-        _user = AuthUser.fromUser(session.user);
-      }
+      _user = user;
     });
   }
 
@@ -89,19 +94,13 @@ class _AuthGateState extends State<AuthGate> {
       case AuthChangeEvent.signedIn:
       case AuthChangeEvent.tokenRefreshed:
       case AuthChangeEvent.userUpdated:
-        if (_passwordRecovery &&
-            data.event != AuthChangeEvent.signedIn) {
+        if (_passwordRecovery) {
           setState(() => _ready = true);
           return;
         }
         final session =
             data.session ?? AuthService.instance.currentSession;
-        if (_passwordRecovery && data.event == AuthChangeEvent.signedIn) {
-          // Stay on reset screen until password flow finishes / signs out.
-          setState(() => _ready = true);
-          return;
-        }
-        _applySession(session);
+        unawaited(_applySession(session));
       default:
         break;
     }
