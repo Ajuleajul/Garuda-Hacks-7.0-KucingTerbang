@@ -144,12 +144,11 @@ diaryRouter.get("/clinician/:clinicianId/patient/:patientId", async (req: Reques
         psychiatrist_id: clinicianId,
         patient_id: patientId,
         status: LinkStatus.ACTIVE,
-        monitoring_on: true,
       },
     });
 
     if (!link) {
-      return res.status(403).json({ error: "No active monitored link for this patient." });
+      return res.status(403).json({ error: "No active care link for this patient." });
     }
 
     const entries = await prisma.diaryEntry.findMany({
@@ -157,7 +156,10 @@ diaryRouter.get("/clinician/:clinicianId/patient/:patientId", async (req: Reques
       orderBy: { created_at: "desc" },
       take: limit,
     });
-    return res.json({ entries: entries.map(serializeEntry) });
+    return res.json({
+      monitoring_on: link.monitoring_on,
+      entries: entries.map(serializeEntry),
+    });
   } catch (error) {
     console.error("List clinician diary error:", error);
     return res.status(500).json({ error: "Failed to load linked patient diary." });

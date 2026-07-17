@@ -1,199 +1,533 @@
+import 'dart:math' as math;
+
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../theme/curamind_theme.dart';
-import '../../animated_cursor.dart';
-import 'PatientMonitoringDashboard.dart';
+import '../../services/diary_service.dart';
+import 'patient_emotion_summary.dart';
 
-class PatientDetailsPage extends StatelessWidget {
-  final MockPatient patient;
+class PatientDetailsPage extends StatefulWidget {
+  const PatientDetailsPage({
+    super.key,
+    required this.groupName,
+    required this.summary,
+  });
 
-  const PatientDetailsPage({super.key, required this.patient});
+  final String groupName;
+  final PatientEmotionSummary summary;
+
+  @override
+  State<PatientDetailsPage> createState() => _PatientDetailsPageState();
+}
+
+class _PatientDetailsPageState extends State<PatientDetailsPage> {
+  int _rangeDays = 14;
+
+  PatientEmotionSummary get s => widget.summary;
+
+  List<DiaryEntryModel> get _dbtInRange {
+    final cutoff = DateTime.now().subtract(Duration(days: _rangeDays));
+    return s.dbtEntries.where((e) => e.createdAt.isAfter(cutoff)).toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  }
+
+  List<_DaySeries> get _daySeries {
+    final byDay = <String, _DayBucket>{};
+    for (final e in _dbtInRange) {
+      final d = e.createdAt.toLocal();
+      final key =
+          '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+      final bucket = byDay.putIfAbsent(key, () => _DayBucket(date: d));
+      if (e.mood > 0) bucket.moods.add(e.mood.toDouble());
+      if (e.affectIntensity > 0) {
+        bucket.affects.add(e.affectIntensity.toDouble());
+      }
+      bucket.urges.add(math.max(e.urgeNssi, e.urgeSubstance).toDouble());
+      bucket.emotions.addAll(e.emotions);
+      bucket.triggers.addAll(e.triggers);
+      bucket.skills.addAll(e.skills);
+    }
+    final keys = byDay.keys.toList()..sort();
+    return keys.map((k) {
+      final b = byDay[k]!;
+      return _DaySeries(
+        label: '${b.date.month}/${b.date.day}',
+        mood: b.moods.isEmpty
+            ? null
+            : b.moods.reduce((a, c) => a + c) / b.moods.length,
+        affect: b.affects.isEmpty
+            ? null
+            : b.affects.reduce((a, c) => a + c) / b.affects.length,
+        urge: b.urges.isEmpty ? null : b.urges.reduce(math.max),
+      );
+    }).toList();
+  }
+
+  Map<String, int> _countTags(Iterable<String> tags) {
+    final counts = <String, int>{};
+    for (final t in tags) {
+      final key = t.trim();
+      if (key.isEmpty) continue;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    final sorted = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return Map.fromEntries(sorted.take(8));
+  }
+
+  String _fmtDate(DateTime d) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final local = d.toLocal();
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
+    return '${months[local.month - 1]} ${local.day} · $hh:$mm';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final bool hasAlert = patient.hasNssiAlert || patient.missedMedicationAlert;
+    final member = s.member;
+    final series = _daySeries;
+    final moods = _dbtInRange.where((e) => e.mood > 0).map((e) => e.mood);
+    final avgMood = moods.isEmpty
+        ? null
+        : moods.reduce((a, b) => a + b) / moods.length;
+    final peakUrge = _dbtInRange.isEmpty
+        ? null
+        : _dbtInRange
+            .map((e) => math.max(e.urgeNssi, e.urgeSubstance))
+            .reduce(math.max);
+    final emotions = _countTags(_dbtInRange.expand((e) => e.emotions));
+    final triggers = _countTags(_dbtInRange.expand((e) => e.triggers));
+    final skills = _countTags(_dbtInRange.expand((e) => e.skills));
+    final recentLogs = s.entries.take(12).toList();
 
     return Scaffold(
       backgroundColor: CuramindColors.mist,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header
-              Row(
-                children: [
-                  CursorHoverRegion(
-                    child: IconButton(
-                      icon: const Icon(Icons.arrow_back_rounded),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          patient.name,
-                          style: GoogleFonts.fraunces(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w600,
-                            color: CuramindColors.ink,
-                          ),
-                        ),
-                        Text(
-                          'Patient ID: #${patient.id.padLeft(4, '0')}',
-                          style: GoogleFonts.outfit(
-                            fontSize: 16,
-                            color: CuramindColors.inkMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (hasAlert)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Action Required',
-                            style: GoogleFonts.outfit(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.redAccent,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 32),
-              
-              // Overview Cards
-              Row(
-                children: [
-                  Expanded(
-                    child: _StatCard(
-                      title: 'Overall Adherence',
-                      value: '${(patient.adherence * 100).toInt()}%',
-                      color: patient.adherence < 0.8 ? Colors.orangeAccent : CuramindColors.sageDeep,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _StatCard(
-                      title: 'Current Mood Avg',
-                      value: '${(patient.recentMood.reduce((a,b)=>a+b)/patient.recentMood.length).toStringAsFixed(1)} / 10',
-                      color: CuramindColors.ocean,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // Chart Area
-              Text(
-                'Recent Mood Trend',
-                style: GoogleFonts.outfit(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: CuramindColors.ink,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                height: 200,
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: CuramindColors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: CuramindColors.sageSoft),
-                  boxShadow: [
-                    BoxShadow(
-                      color: CuramindColors.slate.withValues(alpha: 0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: CustomPaint(
-                  painter: _BigSparklinePainter(moods: patient.recentMood, color: CuramindColors.ocean),
-                  child: const SizedBox.expand(),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Alerts / Logs
-              Text(
-                'Recent Clinical Logs & Alerts',
-                style: GoogleFonts.outfit(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: CuramindColors.ink,
-                ),
-              ),
-              const SizedBox(height: 12),
-              if (patient.hasNssiAlert)
-                 _LogEntry(
-                   title: 'NSSI Urge Logged',
-                   description: 'Patient reported a high urge for non-suicidal self-injury on the DBT diary card.',
-                   isWarning: true,
-                   time: '2 hours ago',
-                 ),
-              if (patient.missedMedicationAlert)
-                 _LogEntry(
-                   title: 'Missed Medication',
-                   description: 'System flagged missing adherence data for yesterday\'s prescribed dose.',
-                   isWarning: true,
-                   time: '1 day ago',
-                 ),
-              const _LogEntry(
-                title: 'Routine Check-in Completed',
-                description: 'Patient completed the standard weekly mood and symptom assessment.',
-                isWarning: false,
-                time: '3 days ago',
-              ),
-            ],
+      appBar: AppBar(
+        backgroundColor: CuramindColors.mist,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: CuramindColors.ink),
+        title: Text(
+          member.patientName,
+          style: GoogleFonts.outfit(
+            fontWeight: FontWeight.w700,
+            color: CuramindColors.ink,
           ),
         ),
       ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: CuramindColors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: CuramindColors.mistBlue),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'In group · ${widget.groupName}',
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: CuramindColors.ocean,
+                  ),
+                ),
+                if (member.email != null && member.email!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    member.email!,
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
+                      color: CuramindColors.inkMuted,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _Chip(
+                      label: member.monitoringOn
+                          ? 'Monitoring on'
+                          : 'Monitoring off',
+                      color: member.monitoringOn
+                          ? CuramindColors.sageDeep
+                          : CuramindColors.danger,
+                    ),
+                    _Chip(
+                      label: '${member.diaryEntries} diary total',
+                      color: CuramindColors.slate,
+                    ),
+                    _Chip(
+                      label: '${member.activeMedsCount} active meds',
+                      color: CuramindColors.ocean,
+                    ),
+                    _Chip(
+                      label: 'Joined ${_fmtDate(member.linkedAt)}',
+                      color: CuramindColors.inkMuted,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            children: [7, 14, 30].map((d) {
+              final selected = _rangeDays == d;
+              return ChoiceChip(
+                label: Text('${d}d'),
+                selected: selected,
+                onSelected: (_) => setState(() => _rangeDays = d),
+                selectedColor: CuramindColors.sageSoft,
+                labelStyle: GoogleFonts.outfit(
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _StatCard(
+                  title: 'Avg mood',
+                  value: avgMood == null ? '—' : avgMood.toStringAsFixed(1),
+                  hint: '/ 10',
+                  color: CuramindColors.ocean,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _StatCard(
+                  title: 'Peak urge',
+                  value: peakUrge?.toString() ?? '—',
+                  hint: '/ 10',
+                  color: (peakUrge ?? 0) >= 7
+                      ? CuramindColors.danger
+                      : CuramindColors.slate,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _StatCard(
+                  title: 'DBT cards',
+                  value: '${_dbtInRange.length}',
+                  hint: 'in range',
+                  color: CuramindColors.sageDeep,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Mood · affect · urge',
+            style: GoogleFonts.outfit(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: CuramindColors.ink,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Daily averages from diary cards (0–10 scale).',
+            style: GoogleFonts.outfit(
+              fontSize: 12,
+              color: CuramindColors.inkMuted,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            height: 240,
+            padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
+            decoration: BoxDecoration(
+              color: CuramindColors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: CuramindColors.mistBlue),
+            ),
+            child: series.length < 2
+                ? Center(
+                    child: Text(
+                      'Not enough diary points in this range yet.',
+                      style: GoogleFonts.outfit(
+                        color: CuramindColors.inkMuted,
+                      ),
+                    ),
+                  )
+                : LineChart(
+                    LineChartData(
+                      minY: 0,
+                      maxY: 10,
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        getDrawingHorizontalLine: (v) => FlLine(
+                          color: CuramindColors.mistBlue,
+                          strokeWidth: 1,
+                        ),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      titlesData: FlTitlesData(
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 28,
+                            interval: 2,
+                            getTitlesWidget: (v, _) => Text(
+                              v.toInt().toString(),
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                color: CuramindColors.inkMuted,
+                              ),
+                            ),
+                          ),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 22,
+                            interval: math.max(
+                              1,
+                              (series.length / 4).floorToDouble(),
+                            ),
+                            getTitlesWidget: (v, _) {
+                              final i = v.round();
+                              if (i < 0 || i >= series.length) {
+                                return const SizedBox.shrink();
+                              }
+                              return Text(
+                                series[i].label,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10,
+                                  color: CuramindColors.inkMuted,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      lineBarsData: [
+                        _line(
+                          series,
+                          (p) => p.mood,
+                          CuramindColors.ocean,
+                        ),
+                        _line(
+                          series,
+                          (p) => p.affect,
+                          CuramindColors.sageDeep,
+                        ),
+                        _line(
+                          series,
+                          (p) => p.urge,
+                          CuramindColors.danger,
+                        ),
+                      ],
+                      lineTouchData: LineTouchData(
+                        touchTooltipData: LineTouchTooltipData(
+                          getTooltipItems: (spots) => spots.map((s) {
+                            final labels = ['Mood', 'Affect', 'Urge'];
+                            return LineTooltipItem(
+                              '${labels[s.barIndex]} ${s.y.toStringAsFixed(1)}',
+                              GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: CuramindColors.white,
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: const [
+              _Legend(color: CuramindColors.ocean, label: 'Mood'),
+              SizedBox(width: 14),
+              _Legend(color: CuramindColors.sageDeep, label: 'Affect'),
+              SizedBox(width: 14),
+              _Legend(color: CuramindColors.danger, label: 'Urge'),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _TagSection(title: 'Frequent emotions', counts: emotions),
+          const SizedBox(height: 12),
+          _TagSection(title: 'Frequent triggers', counts: triggers),
+          const SizedBox(height: 12),
+          _TagSection(title: 'Skills used', counts: skills),
+          const SizedBox(height: 20),
+          Text(
+            'Recent diary log',
+            style: GoogleFonts.outfit(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: CuramindColors.ink,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (recentLogs.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: CuramindColors.mistBlue.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'No diary entries available for this patient.',
+                style: GoogleFonts.outfit(color: CuramindColors.inkMuted),
+              ),
+            )
+          else
+            ...recentLogs.map(
+              (e) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _DiaryLogTile(entry: e, formatDate: _fmtDate),
+              ),
+            ),
+          if (member.medications.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Active prescriptions',
+              style: GoogleFonts.outfit(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: CuramindColors.ink,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...member.medications.map(
+              (med) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: CuramindColors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: CuramindColors.mistBlue),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        med.name,
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.w700,
+                          color: CuramindColors.ink,
+                        ),
+                      ),
+                      Text(
+                        med.dosageAndFreq,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          color: CuramindColors.slate,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  LineChartBarData _line(
+    List<_DaySeries> series,
+    double? Function(_DaySeries) pick,
+    Color color,
+  ) {
+    final spots = <FlSpot>[];
+    for (var i = 0; i < series.length; i++) {
+      final v = pick(series[i]);
+      if (v != null) spots.add(FlSpot(i.toDouble(), v));
+    }
+    return LineChartBarData(
+      spots: spots,
+      isCurved: true,
+      color: color,
+      barWidth: 2.5,
+      dotData: const FlDotData(show: false),
+      belowBarData: BarAreaData(show: false),
     );
   }
 }
 
+class _DayBucket {
+  _DayBucket({required this.date});
+  final DateTime date;
+  final List<double> moods = [];
+  final List<double> affects = [];
+  final List<double> urges = [];
+  final List<String> emotions = [];
+  final List<String> triggers = [];
+  final List<String> skills = [];
+}
+
+class _DaySeries {
+  const _DaySeries({
+    required this.label,
+    required this.mood,
+    required this.affect,
+    required this.urge,
+  });
+  final String label;
+  final double? mood;
+  final double? affect;
+  final double? urge;
+}
+
 class _StatCard extends StatelessWidget {
+  const _StatCard({
+    required this.title,
+    required this.value,
+    required this.hint,
+    required this.color,
+  });
+
   final String title;
   final String value;
+  final String hint;
   final Color color;
-
-  const _StatCard({required this.title, required this.value, required this.color});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: CuramindColors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: CuramindColors.sageSoft),
-        boxShadow: [
-          BoxShadow(
-            color: CuramindColors.slate.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: CuramindColors.mistBlue),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -201,19 +535,34 @@ class _StatCard extends StatelessWidget {
           Text(
             title,
             style: GoogleFonts.outfit(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              color: CuramindColors.slate,
+              fontSize: 11,
+              color: CuramindColors.inkMuted,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: GoogleFonts.outfit(
-              fontSize: 32,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                value,
+                style: GoogleFonts.outfit(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Text(
+                  hint,
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    color: CuramindColors.inkMuted,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -221,148 +570,256 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _LogEntry extends StatelessWidget {
-  final String title;
-  final String description;
-  final bool isWarning;
-  final String time;
-
-  const _LogEntry({
-    required this.title,
-    required this.description,
-    required this.isWarning,
-    required this.time,
-  });
+class _Chip extends StatelessWidget {
+  const _Chip({required this.label, required this.color});
+  final String label;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: CuramindColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isWarning ? Colors.redAccent.withValues(alpha: 0.3) : CuramindColors.sageSoft,
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.outfit(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: color,
         ),
       ),
-      child: Row(
+    );
+  }
+}
+
+class _Legend extends StatelessWidget {
+  const _Legend({required this.color, required this.label});
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            color: CuramindColors.inkMuted,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TagSection extends StatelessWidget {
+  const _TagSection({required this.title, required this.counts});
+  final String title;
+  final Map<String, int> counts;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: CuramindColors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: CuramindColors.mistBlue),
+      ),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            isWarning ? Icons.warning_amber_rounded : Icons.info_outline_rounded,
-            color: isWarning ? Colors.redAccent : CuramindColors.ocean,
-            size: 24,
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      title,
-                      style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: CuramindColors.ink,
-                      ),
-                    ),
-                    Text(
-                      time,
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        color: CuramindColors.inkMuted,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: GoogleFonts.outfit(
-                    fontSize: 14,
-                    color: CuramindColors.slate,
-                  ),
-                ),
-              ],
+          Text(
+            title,
+            style: GoogleFonts.outfit(
+              fontWeight: FontWeight.w700,
+              color: CuramindColors.ink,
             ),
           ),
+          const SizedBox(height: 8),
+          if (counts.isEmpty)
+            Text(
+              'No tagged data in this range.',
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                color: CuramindColors.inkMuted,
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: counts.entries
+                  .map(
+                    (e) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: CuramindColors.mistBlue.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${e.key} · ${e.value}',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: CuramindColors.ocean,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
         ],
       ),
     );
   }
 }
 
-class _BigSparklinePainter extends CustomPainter {
-  final List<double> moods;
-  final Color color;
+class _DiaryLogTile extends StatelessWidget {
+  const _DiaryLogTile({
+    required this.entry,
+    required this.formatDate,
+  });
 
-  _BigSparklinePainter({required this.moods, required this.color});
+  final DiaryEntryModel entry;
+  final String Function(DateTime) formatDate;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final paintLine = Paint()
-      ..color = color
-      ..strokeWidth = 4.0
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    final paintFill = Paint()
-      ..color = color.withValues(alpha: 0.1)
-      ..style = PaintingStyle.fill;
-
-    final path = Path();
-    final fillPath = Path();
-    
-    final double stepX = size.width / (moods.length - 1);
-    
-    final double minY = moods.reduce((a, b) => a < b ? a : b) - 1;
-    final double maxY = moods.reduce((a, b) => a > b ? a : b) + 1;
-    final double rangeY = (maxY - minY).clamp(1.0, 10.0);
-
-    Offset getPoint(int i) {
-      final double x = i * stepX;
-      final double normalizedY = 1 - ((moods[i] - minY) / rangeY);
-      final double y = normalizedY * size.height;
-      return Offset(x, y);
-    }
-
-    final p0 = getPoint(0);
-    path.moveTo(p0.dx, p0.dy);
-    fillPath.moveTo(p0.dx, size.height);
-    fillPath.lineTo(p0.dx, p0.dy);
-
-    for (int i = 0; i < moods.length - 1; i++) {
-      final p1 = getPoint(i);
-      final p2 = getPoint(i + 1);
-
-      final cp1 = Offset(p1.dx + stepX / 2, p1.dy);
-      final cp2 = Offset(p2.dx - stepX / 2, p2.dy);
-
-      path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p2.dx, p2.dy);
-      fillPath.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p2.dx, p2.dy);
-    }
-
-    fillPath.lineTo(size.width, size.height);
-    fillPath.close();
-
-    canvas.drawPath(fillPath, paintFill);
-    canvas.drawPath(path, paintLine);
-    
-    final dotOuter = Paint()..color = CuramindColors.white;
-    final dotInner = Paint()..color = color;
-    
-    for (int i = 0; i < moods.length; i++) {
-      final p = getPoint(i);
-      canvas.drawCircle(p, 8, dotOuter);
-      canvas.drawCircle(p, 5, dotInner);
-    }
+  Widget build(BuildContext context) {
+    final isDbt = entry.kind == DiaryEntryKind.dbtCard;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: CuramindColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: CuramindColors.mistBlue),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isDbt
+                      ? CuramindColors.sageSoft.withValues(alpha: 0.6)
+                      : CuramindColors.mistBlue,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  isDbt ? 'DBT card' : 'Coping',
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isDbt
+                        ? CuramindColors.sageDeep
+                        : CuramindColors.ocean,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                formatDate(entry.createdAt),
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  color: CuramindColors.inkMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (isDbt) ...[
+            Text(
+              'Mood ${entry.mood} · Affect ${entry.affectIntensity} · '
+              'Urge NSSI ${entry.urgeNssi} · Substance ${entry.urgeSubstance}',
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: CuramindColors.ink,
+              ),
+            ),
+            if (entry.emotions.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Emotions: ${entry.emotions.join(', ')}',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  color: CuramindColors.slate,
+                ),
+              ),
+            ],
+            if (entry.triggers.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                'Triggers: ${entry.triggers.join(', ')}',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  color: CuramindColors.slate,
+                ),
+              ),
+            ],
+            if (entry.skills.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                'Skills: ${entry.skills.join(', ')}',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  color: CuramindColors.slate,
+                ),
+              ),
+            ],
+            if (entry.notes.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                entry.notes,
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  color: CuramindColors.inkMuted,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ] else ...[
+            if (entry.situation.isNotEmpty)
+              Text(
+                'Situation: ${entry.situation}',
+                style: GoogleFonts.outfit(fontSize: 12, color: CuramindColors.slate),
+              ),
+            if (entry.thoughts.isNotEmpty)
+              Text(
+                'Thoughts: ${entry.thoughts}',
+                style: GoogleFonts.outfit(fontSize: 12, color: CuramindColors.slate),
+              ),
+            if (entry.behavior.isNotEmpty)
+              Text(
+                'Behavior: ${entry.behavior}',
+                style: GoogleFonts.outfit(fontSize: 12, color: CuramindColors.slate),
+              ),
+            if (entry.outcome.isNotEmpty)
+              Text(
+                'Outcome: ${entry.outcome}',
+                style: GoogleFonts.outfit(fontSize: 12, color: CuramindColors.slate),
+              ),
+          ],
+        ],
+      ),
+    );
   }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

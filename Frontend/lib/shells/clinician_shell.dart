@@ -23,7 +23,7 @@ class ClinicianShell extends StatefulWidget {
 
   static const destinations = [
     NavDestination(label: 'Home', icon: Icons.home_outlined),
-    NavDestination(label: 'Codes', icon: Icons.qr_code_2_outlined),
+    NavDestination(label: 'Groups', icon: Icons.groups_2_outlined),
     NavDestination(label: 'Monitor', icon: Icons.monitor_heart_outlined),
     NavDestination(label: 'Dual Chart', icon: Icons.stacked_line_chart),
     NavDestination(label: 'Meds', icon: Icons.list_alt_outlined),

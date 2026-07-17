@@ -30,6 +30,7 @@ class JoinGroup {
     this.expiresAt,
     this.psychiatristName,
     this.psychiatristEmail,
+    this.membersPreview = const [],
   });
 
   final String id;
@@ -42,6 +43,7 @@ class JoinGroup {
   final int memberCount;
   final DateTime createdAt;
   final DateTime? expiresAt;
+  final List<GroupMemberPreview> membersPreview;
 
   bool get isExpired =>
       expiresAt != null && !expiresAt!.isAfter(DateTime.now());
@@ -59,9 +61,11 @@ class JoinGroup {
         'member_count': memberCount,
         'created_at': createdAt.toIso8601String(),
         'expires_at': expiresAt?.toIso8601String(),
+        'members_preview': membersPreview.map((m) => m.toJson()).toList(),
       };
 
   factory JoinGroup.fromJson(Map<String, dynamic> json) {
+    final previewRaw = json['members_preview'] as List? ?? const [];
     return JoinGroup(
       id: _asString(json['id']),
       code: _asString(json['code']).toUpperCase(),
@@ -73,6 +77,13 @@ class JoinGroup {
       memberCount: (json['member_count'] as num?)?.toInt() ?? 0,
       createdAt: _parseDate(json['created_at']) ?? DateTime.now(),
       expiresAt: _parseDate(json['expires_at']),
+      membersPreview: previewRaw
+          .map(
+            (e) => GroupMemberPreview.fromJson(
+              Map<String, dynamic>.from(e as Map),
+            ),
+          )
+          .toList(),
     );
   }
 
@@ -80,12 +91,14 @@ class JoinGroup {
     bool? isActive,
     int? memberCount,
     String? name,
+    String? code,
     DateTime? expiresAt,
     bool clearExpiresAt = false,
+    List<GroupMemberPreview>? membersPreview,
   }) {
     return JoinGroup(
       id: id,
-      code: code,
+      code: code ?? this.code,
       name: name ?? this.name,
       psychiatristId: psychiatristId,
       psychiatristName: psychiatristName,
@@ -94,6 +107,103 @@ class JoinGroup {
       memberCount: memberCount ?? this.memberCount,
       createdAt: createdAt,
       expiresAt: clearExpiresAt ? null : (expiresAt ?? this.expiresAt),
+      membersPreview: membersPreview ?? this.membersPreview,
+    );
+  }
+}
+
+class GroupMemberPreview {
+  const GroupMemberPreview({
+    required this.patientId,
+    required this.patientName,
+  });
+
+  final String patientId;
+  final String patientName;
+
+  Map<String, dynamic> toJson() => {
+        'patient_id': patientId,
+        'patient_name': patientName,
+      };
+
+  factory GroupMemberPreview.fromJson(Map<String, dynamic> json) {
+    return GroupMemberPreview(
+      patientId: _asString(json['patient_id']),
+      patientName: _asString(json['patient_name'], 'Patient'),
+    );
+  }
+}
+
+class GroupMember {
+  const GroupMember({
+    required this.linkId,
+    required this.patientId,
+    required this.patientName,
+    required this.monitoringOn,
+    required this.status,
+    required this.linkedAt,
+    required this.diaryEntries,
+    required this.activeMedsCount,
+    required this.medications,
+    this.email,
+  });
+
+  final String linkId;
+  final String patientId;
+  final String patientName;
+  final String? email;
+  final bool monitoringOn;
+  final String status;
+  final DateTime linkedAt;
+  final int diaryEntries;
+  final int activeMedsCount;
+  final List<GroupMemberMed> medications;
+
+  factory GroupMember.fromJson(Map<String, dynamic> json) {
+    final medsRaw = json['medications'] as List? ?? const [];
+    return GroupMember(
+      linkId: _asString(json['link_id']),
+      patientId: _asString(json['patient_id']),
+      patientName: _asString(json['patient_name'], 'Patient'),
+      email: json['email']?.toString(),
+      monitoringOn: json['monitoring_on'] == true,
+      status: _asString(json['status'], 'ACTIVE'),
+      linkedAt: _parseDate(json['linked_at']) ?? DateTime.now(),
+      diaryEntries: (json['diary_entries'] as num?)?.toInt() ?? 0,
+      activeMedsCount: (json['active_meds_count'] as num?)?.toInt() ?? 0,
+      medications: medsRaw
+          .map(
+            (e) => GroupMemberMed.fromJson(
+              Map<String, dynamic>.from(e as Map),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class GroupMemberMed {
+  const GroupMemberMed({
+    required this.id,
+    required this.name,
+    required this.dosageAndFreq,
+    required this.isActive,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String name;
+  final String dosageAndFreq;
+  final bool isActive;
+  final DateTime createdAt;
+
+  factory GroupMemberMed.fromJson(Map<String, dynamic> json) {
+    return GroupMemberMed(
+      id: _asString(json['id']),
+      name: _asString(json['name']),
+      dosageAndFreq: _asString(json['dosage_and_freq']),
+      isActive: json['is_active'] != false,
+      createdAt: _parseDate(json['created_at']) ?? DateTime.now(),
     );
   }
 }
@@ -385,6 +495,44 @@ class LinkService {
     return localMine;
   }
 
+  Future<List<GroupMember>> listGroupMembers(String groupId) async {
+    final uid = _uid;
+    if (uid == null) throw LinkFailure('Sign in required.');
+
+    if (groupId.startsWith('local-')) return const [];
+
+    try {
+      final res = await http
+          .get(
+            Uri.parse(
+              '${ApiConfig.baseUrl}/api/link/groups/$groupId/members'
+              '?psychiatrist_id=$uid',
+            ),
+          )
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        final members = (body['members'] as List? ?? [])
+            .map(
+              (e) => GroupMember.fromJson(Map<String, dynamic>.from(e as Map)),
+            )
+            .toList();
+        return members;
+      }
+      if (res.statusCode == 404) return const [];
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      throw LinkFailure(
+        (body['error'] as String?) ?? 'Failed to load members.',
+      );
+    } on LinkFailure {
+      rethrow;
+    } catch (_) {
+      throw LinkFailure(
+        'Cannot reach Backend at ${ApiConfig.baseUrl} to load members.',
+      );
+    }
+  }
+
   Future<JoinGroup> setGroupActive(String groupId, bool active) async {
     final store = await _readStore();
     final groups = (store['groups'] as List? ?? [])
@@ -404,7 +552,10 @@ class LinkService {
             .patch(
               Uri.parse('${ApiConfig.baseUrl}/api/link/groups/$groupId'),
               headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({'is_active': active}),
+              body: jsonEncode({
+                'is_active': active,
+                'psychiatrist_id': _uid,
+              }),
             )
             .timeout(const Duration(seconds: 6));
         if (res.statusCode == 200) {
@@ -419,6 +570,126 @@ class LinkService {
     }
 
     return local;
+  }
+
+  Future<JoinGroup> renameGroup(String groupId, String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) throw LinkFailure('Group name is required.');
+
+    final store = await _readStore();
+    final groups = (store['groups'] as List? ?? [])
+        .map((e) => JoinGroup.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    final i = groups.indexWhere((g) => g.id == groupId);
+    if (i < 0) throw LinkFailure('Group not found.');
+
+    groups[i] = groups[i].copyWith(
+      name: trimmed.length > 80 ? trimmed.substring(0, 80) : trimmed,
+    );
+    store['groups'] = groups.map((g) => g.toJson()).toList();
+    await _writeStore(store);
+    final local = groups[i];
+
+    if (groupId.startsWith('local-')) return local;
+
+    try {
+      final res = await http
+          .patch(
+            Uri.parse('${ApiConfig.baseUrl}/api/link/groups/$groupId'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'name': trimmed,
+              'psychiatrist_id': _uid,
+            }),
+          )
+          .timeout(const Duration(seconds: 6));
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        final remote = JoinGroup.fromJson(
+          Map<String, dynamic>.from(body['group'] as Map),
+        );
+        await _upsertLocalGroup(remote);
+        return remote;
+      }
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      throw LinkFailure(
+        (body['error'] as String?) ?? 'Failed to rename group.',
+      );
+    } on LinkFailure {
+      rethrow;
+    } catch (_) {
+      throw LinkFailure(
+        'Cannot reach Backend at ${ApiConfig.baseUrl} to rename group.',
+      );
+    }
+  }
+
+  Future<JoinGroup> regenerateGroupCode({
+    required String groupId,
+    int? expiresInMinutes,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw LinkFailure('Sign in required.');
+
+    DateTime? expiresAt;
+    if (expiresInMinutes != null && expiresInMinutes > 0) {
+      expiresAt = DateTime.now().add(Duration(minutes: expiresInMinutes));
+    }
+
+    if (groupId.startsWith('local-')) {
+      final store = await _readStore();
+      final groups = (store['groups'] as List? ?? [])
+          .map((e) => JoinGroup.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+      final i = groups.indexWhere((g) => g.id == groupId);
+      if (i < 0) throw LinkFailure('Group not found.');
+      var code = _newCode();
+      while (groups.any((g) => g.code == code && g.id != groupId)) {
+        code = _newCode();
+      }
+      groups[i] = groups[i].copyWith(
+        code: code,
+        expiresAt: expiresAt,
+        isActive: true,
+        clearExpiresAt: expiresInMinutes == null || expiresInMinutes <= 0,
+      );
+      store['groups'] = groups.map((g) => g.toJson()).toList();
+      await _writeStore(store);
+      return groups[i];
+    }
+
+    try {
+      final res = await http
+          .post(
+            Uri.parse(
+              '${ApiConfig.baseUrl}/api/link/groups/$groupId/regenerate',
+            ),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'psychiatrist_id': uid,
+              'expires_in_minutes': expiresInMinutes,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        final remote = JoinGroup.fromJson(
+          Map<String, dynamic>.from(body['group'] as Map),
+        );
+        await _upsertLocalGroup(remote);
+        return remote;
+      }
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      throw LinkFailure(
+        (body['error'] as String?) ?? 'Failed to regenerate code.',
+      );
+    } on LinkFailure {
+      rethrow;
+    } catch (_) {
+      throw LinkFailure(
+        'Cannot reach Backend at ${ApiConfig.baseUrl} to regenerate code.',
+      );
+    }
   }
 
   Future<void> deleteGroup(String groupId) async {

@@ -111,6 +111,40 @@ class DiaryService {
     }
   }
 
+  Future<List<DiaryEntryModel>> loadClinicianPatientEntries(
+    String patientId, {
+    int limit = 90,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw DiaryFailure('Sign in required.');
+
+    try {
+      final res = await http
+          .get(
+            Uri.parse(
+              '${ApiConfig.baseUrl}/api/diary/clinician/$uid/patient/$patientId'
+              '?limit=$limit',
+            ),
+          )
+          .timeout(const Duration(seconds: 10));
+      if (res.statusCode != 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        throw DiaryFailure(
+          (body['error'] ?? 'Failed to load patient diary.').toString(),
+        );
+      }
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      return ((body['entries'] as List?) ?? const [])
+          .map((e) => DiaryEntryModel.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (e) {
+      if (e is DiaryFailure) rethrow;
+      throw DiaryFailure(
+        'Cannot reach diary service at ${ApiConfig.baseUrl}.',
+      );
+    }
+  }
+
   Future<DiaryEntryModel> saveDbtCard({
     required int mood,
     required int affectIntensity,

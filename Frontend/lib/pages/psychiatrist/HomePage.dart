@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../theme/curamind_theme.dart';
 
 /// Clinician shell indices (with Home at 0):
-/// 0 Home · 1 Codes · 2 Monitor · 3 Dual Chart · 4 Meds · 5 Export · 6 Profile
+/// 0 Home · 1 Groups · 2 Monitor · 3 Dual Chart · 4 Meds · 5 Export · 6 Profile
 class ClinicianHomePage extends StatelessWidget {
   const ClinicianHomePage({
     super.key,
@@ -94,9 +94,9 @@ class ClinicianHomePage extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 _PrimaryTile(
-                  title: 'Join codes',
-                  subtitle: 'Create groups so patients can link',
-                  icon: Icons.qr_code_2_outlined,
+                  title: 'Care groups',
+                  subtitle: 'Manage groups and invite links',
+                  icon: Icons.groups_2_outlined,
                   onTap: () => onNavigate(codesIndex),
                 ),
                 const SizedBox(height: 10),
@@ -156,8 +156,8 @@ class ClinicianHomePage extends StatelessWidget {
                   runSpacing: 8,
                   children: [
                     _ToolChip(
-                      label: 'Join codes',
-                      icon: Icons.qr_code_2_outlined,
+                      label: 'Groups',
+                      icon: Icons.groups_2_outlined,
                       onTap: () => onNavigate(codesIndex),
                     ),
                     _ToolChip(

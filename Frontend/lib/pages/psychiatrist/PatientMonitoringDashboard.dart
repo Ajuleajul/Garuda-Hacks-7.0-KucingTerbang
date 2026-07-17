@@ -1,128 +1,85 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../animated_cursor.dart';
+import '../../services/diary_service.dart';
+import '../../services/link_service.dart';
 import '../../theme/curamind_theme.dart';
 import 'PatientDetailsPage.dart';
+import 'patient_emotion_summary.dart';
 
-class MockPatient {
-  final String id;
-  final String name;
-  final double adherence;
-  final bool hasNssiAlert;
-  final bool missedMedicationAlert;
-  final List<double> recentMood;
-
-  const MockPatient({
-    required this.id,
-    required this.name,
-    required this.adherence,
-    this.hasNssiAlert = false,
-    this.missedMedicationAlert = false,
-    required this.recentMood,
-  });
-}
-
-final List<MockPatient> _mockPatients = [
-  const MockPatient(
-    id: '1',
-    name: 'Eleanor Vance',
-    adherence: 0.92,
-    recentMood: [5, 6, 5, 7, 7, 8, 7],
-  ),
-  const MockPatient(
-    id: '2',
-    name: 'Theo Crain',
-    adherence: 0.45,
-    missedMedicationAlert: true,
-    recentMood: [4, 4, 3, 2, 4, 3, 2],
-  ),
-  const MockPatient(
-    id: '3',
-    name: 'Luke Crain',
-    adherence: 0.78,
-    hasNssiAlert: true,
-    recentMood: [6, 7, 5, 2, 3, 5, 4],
-  ),
-  const MockPatient(
-    id: '4',
-    name: 'Steven Crain',
-    adherence: 1.0,
-    recentMood: [7, 7, 8, 7, 8, 8, 9],
-  ),
-  const MockPatient(
-    id: '5',
-    name: 'Shirley Crain',
-    adherence: 0.88,
-    recentMood: [6, 6, 7, 6, 7, 6, 6],
-  ),
-];
-
-class PatientMonitoringDashboard extends StatelessWidget {
+class PatientMonitoringDashboard extends StatefulWidget {
   const PatientMonitoringDashboard({
     super.key,
-    this.embedded = false,
+    required this.group,
   });
 
-  final bool embedded;
+  final JoinGroup group;
+
+  @override
+  State<PatientMonitoringDashboard> createState() =>
+      _PatientMonitoringDashboardState();
+}
+
+class _PatientMonitoringDashboardState
+    extends State<PatientMonitoringDashboard> {
+  bool _loading = true;
+  String? _error;
+  List<PatientEmotionSummary> _summaries = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final members =
+          await LinkService.instance.listGroupMembers(widget.group.id);
+      final futures = members.map((m) async {
+        try {
+          final entries =
+              await DiaryService.instance.loadClinicianPatientEntries(
+            m.patientId,
+            limit: 60,
+          );
+          return PatientEmotionSummary(member: m, entries: entries);
+        } catch (_) {
+          return PatientEmotionSummary(member: m, entries: const []);
+        }
+      });
+      final summaries = await Future.wait(futures);
+      summaries.sort((a, b) {
+        final alertCmp = (b.hasAlert ? 1 : 0).compareTo(a.hasAlert ? 1 : 0);
+        if (alertCmp != 0) return alertCmp;
+        return a.member.patientName
+            .toLowerCase()
+            .compareTo(b.member.patientName.toLowerCase());
+      });
+      if (!mounted) return;
+      setState(() {
+        _summaries = summaries;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    int crossAxisCount = 1;
-    if (screenWidth > 1200) {
-      crossAxisCount = 4;
-    } else if (screenWidth > 900) {
-      crossAxisCount = 3;
-    } else if (screenWidth > 600) {
-      crossAxisCount = 2;
-    }
-
-    final content = Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Active Patients',
-            style: GoogleFonts.fraunces(
-              fontSize: 28,
-              fontWeight: FontWeight.w600,
-              color: CuramindColors.ink,
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Monitor adherence and recent DBT diary trends.',
-            style: GoogleFonts.outfit(
-              fontSize: 15,
-              color: CuramindColors.inkMuted,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Expanded(
-            child: GridView.builder(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 1.15,
-              ),
-              itemCount: _mockPatients.length,
-              itemBuilder: (context, index) {
-                final patient = _mockPatients[index];
-                return _PatientCard(patient: patient);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (embedded) {
-      return ColoredBox(color: CuramindColors.mist, child: content);
-    }
+    final alertCount = _summaries.where((s) => s.hasAlert).length;
 
     return Scaffold(
       backgroundColor: CuramindColors.mist,
@@ -130,237 +87,457 @@ class PatientMonitoringDashboard extends StatelessWidget {
         backgroundColor: CuramindColors.mist,
         elevation: 0,
         iconTheme: const IconThemeData(color: CuramindColors.ink),
-      ),
-      body: SafeArea(child: content),
-    );
-  }
-}
-
-class _PatientCard extends StatelessWidget {
-  final MockPatient patient;
-
-  const _PatientCard({required this.patient});
-
-  @override
-  Widget build(BuildContext context) {
-    final bool hasAlert = patient.hasNssiAlert || patient.missedMedicationAlert;
-
-    return CursorHoverRegion(
-      child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => PatientDetailsPage(patient: patient),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          decoration: BoxDecoration(
-            color: CuramindColors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: hasAlert ? Colors.red.withValues(alpha: 0.3) : CuramindColors.sageSoft.withValues(alpha: 0.5),
-              width: hasAlert ? 1.5 : 1.0,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: CuramindColors.slate.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+        title: Text(
+          widget.group.name,
+          style: GoogleFonts.outfit(
+            fontWeight: FontWeight.w700,
+            color: CuramindColors.ink,
           ),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        ),
+        actions: [
+          IconButton(
+            onPressed: _loading ? null : _load,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        color: CuramindColors.sageDeep,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+          children: [
+            Text(
+              'Group emotion overview',
+              style: GoogleFonts.fraunces(
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
+                color: CuramindColors.ink,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Last 7 days of DBT diary cards — mood, affect, and urge signals.',
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                color: CuramindColors.inkMuted,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (!_loading && _error == null)
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
-                    child: Text(
-                      patient.name,
-                      style: GoogleFonts.outfit(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: CuramindColors.ink,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: _GroupStatChip(
+                      label: 'Patients',
+                      value: '${_summaries.length}',
+                      color: CuramindColors.ocean,
                     ),
                   ),
-                  if (hasAlert)
-                    const Icon(
-                      Icons.warning_amber_rounded,
-                      color: Colors.redAccent,
-                      size: 20,
-                    )
-                  else
-                    const Icon(
-                      Icons.check_circle_outline_rounded,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _GroupStatChip(
+                      label: 'Needs attention',
+                      value: '$alertCount',
+                      color: alertCount > 0
+                          ? CuramindColors.danger
+                          : CuramindColors.sageDeep,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _GroupStatChip(
+                      label: 'Diary (7d)',
+                      value:
+                          '${_summaries.fold<int>(0, (n, s) => n + s.recentDbt.length)}',
                       color: CuramindColors.sageDeep,
-                      size: 20,
                     ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'ID: #${patient.id.padLeft(4, '0')}',
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  color: CuramindColors.inkMuted,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                flex: 3,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: _MiniSparkline(moods: patient.recentMood),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Divider(height: 1, color: CuramindColors.sageSoft),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Adherence',
-                        style: GoogleFonts.outfit(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: CuramindColors.inkMuted,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${(patient.adherence * 100).toInt()}%',
-                        style: GoogleFonts.outfit(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: patient.adherence < 0.8 ? Colors.orangeAccent : CuramindColors.ink,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (patient.hasNssiAlert)
-                        _AlertBadge(
-                          label: 'NSSI Urge Logged',
-                          color: Colors.redAccent,
-                        ),
-                      if (patient.missedMedicationAlert) ...[
-                        if (patient.hasNssiAlert) const SizedBox(height: 4),
-                        _AlertBadge(
-                          label: 'Missed Medication',
-                          color: Colors.orangeAccent,
-                        ),
-                      ],
-                      if (!hasAlert)
-                        _AlertBadge(
-                          label: 'Stable',
-                          color: CuramindColors.sageDeep,
-                        ),
-                    ],
                   ),
                 ],
               ),
-            ],
-          ),
+            const SizedBox(height: 16),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 48),
+                child: Center(
+                  child: CircularProgressIndicator(
+                    color: CuramindColors.sageDeep,
+                  ),
+                ),
+              )
+            else if (_error != null)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style:
+                          GoogleFonts.outfit(color: CuramindColors.inkMuted),
+                    ),
+                    FilledButton(onPressed: _load, child: const Text('Retry')),
+                  ],
+                ),
+              )
+            else if (_summaries.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: CuramindColors.mistBlue.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  'No patients in this group yet. Share an invite link from Groups.',
+                  style: GoogleFonts.outfit(
+                    color: CuramindColors.inkMuted,
+                    height: 1.4,
+                  ),
+                ),
+              )
+            else
+              ..._summaries.map(
+                (s) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _PatientEmotionCard(
+                    summary: s,
+                    groupName: widget.group.name,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _AlertBadge extends StatelessWidget {
-  final String label;
-  final Color color;
+class _GroupStatChip extends StatelessWidget {
+  const _GroupStatChip({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
-  const _AlertBadge({required this.label, required this.color});
+  final String label;
+  final String value;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        color: CuramindColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: CuramindColors.mistBlue),
       ),
-      child: Text(
-        label,
-        style: GoogleFonts.outfit(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: color,
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: GoogleFonts.outfit(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(
+              fontSize: 11,
+              color: CuramindColors.inkMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PatientEmotionCard extends StatelessWidget {
+  const _PatientEmotionCard({
+    required this.summary,
+    required this.groupName,
+  });
+
+  final PatientEmotionSummary summary;
+  final String groupName;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = summary.member;
+    final spark = summary.moodSpark;
+    final alerts = <String>[
+      if (!m.monitoringOn) 'Monitoring off',
+      if (summary.highUrgeAlert) 'High urge',
+      if (summary.lowMoodAlert) 'Low mood',
+      if (summary.inactiveAlert) 'Quiet 3d+',
+    ];
+
+    return CursorHoverRegion(
+      child: Material(
+        color: CuramindColors.white,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => PatientDetailsPage(
+                  groupName: groupName,
+                  summary: summary,
+                ),
+              ),
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: summary.hasAlert
+                    ? CuramindColors.danger.withValues(alpha: 0.45)
+                    : CuramindColors.mistBlue,
+                width: summary.hasAlert ? 1.5 : 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: CuramindColors.sageSoft,
+                      child: Text(
+                        m.patientName.trim().isEmpty
+                            ? '?'
+                            : m.patientName.trim()[0].toUpperCase(),
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.w700,
+                          color: CuramindColors.sageDeep,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            m.patientName,
+                            style: GoogleFonts.outfit(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: CuramindColors.ink,
+                            ),
+                          ),
+                          if (m.email != null && m.email!.isNotEmpty)
+                            Text(
+                              m.email!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                color: CuramindColors.inkMuted,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (summary.hasAlert)
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: CuramindColors.danger,
+                        size: 22,
+                      ),
+                  ],
+                ),
+                if (alerts.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: alerts
+                        .map(
+                          (a) => Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color:
+                                  CuramindColors.danger.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              a,
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: CuramindColors.danger,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _MetricCell(
+                        label: 'Mood 7d',
+                        value: summary.avgMood7d == null
+                            ? '—'
+                            : summary.avgMood7d!.toStringAsFixed(1),
+                      ),
+                    ),
+                    Expanded(
+                      child: _MetricCell(
+                        label: 'Affect',
+                        value: summary.avgAffect7d == null
+                            ? '—'
+                            : summary.avgAffect7d!.toStringAsFixed(1),
+                      ),
+                    ),
+                    Expanded(
+                      child: _MetricCell(
+                        label: 'Peak urge',
+                        value: summary.peakUrge7d?.toString() ?? '—',
+                      ),
+                    ),
+                    Expanded(
+                      child: _MetricCell(
+                        label: 'Cards',
+                        value: '${summary.recentDbt.length}',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 44,
+                  child: spark.length < 2
+                      ? Center(
+                          child: Text(
+                            summary.entries.isEmpty
+                                ? 'No diary data yet'
+                                : 'Need more points for a trend',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              color: CuramindColors.inkMuted,
+                            ),
+                          ),
+                        )
+                      : CustomPaint(
+                          painter: _MiniSparklinePainter(
+                            values: spark,
+                            color: CuramindColors.ocean,
+                          ),
+                          child: const SizedBox.expand(),
+                        ),
+                ),
+                if (summary.topEmotions.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Top emotions: ${summary.topEmotions.keys.join(', ')}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: CuramindColors.slate,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    'Open full report →',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: CuramindColors.ocean,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-class _MiniSparkline extends StatelessWidget {
-  final List<double> moods;
+class _MetricCell extends StatelessWidget {
+  const _MetricCell({required this.label, required this.value});
 
-  const _MiniSparkline({required this.moods});
+  final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
-    if (moods.isEmpty) return const SizedBox.shrink();
-    return CustomPaint(
-      painter: _SparklinePainter(moods: moods, color: CuramindColors.sageDeep),
-      child: const SizedBox.expand(),
+    return Column(
+      children: [
+        Text(
+          value,
+          style: GoogleFonts.outfit(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: CuramindColors.ink,
+          ),
+        ),
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 10,
+            color: CuramindColors.inkMuted,
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _SparklinePainter extends CustomPainter {
-  final List<double> moods;
-  final Color color;
+class _MiniSparklinePainter extends CustomPainter {
+  _MiniSparklinePainter({required this.values, required this.color});
 
-  _SparklinePainter({required this.moods, required this.color});
+  final List<double> values;
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 2.0
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
+    if (values.length < 2) return;
+    final minV = values.reduce(math.min);
+    final maxV = values.reduce(math.max);
+    final range = (maxV - minV).abs() < 0.01 ? 1.0 : (maxV - minV);
     final path = Path();
-    final double stepX = size.width / (moods.length - 1);
-    
-    final double minY = moods.reduce((a, b) => a < b ? a : b) - 1;
-    final double maxY = moods.reduce((a, b) => a > b ? a : b) + 1;
-    final double rangeY = (maxY - minY).clamp(1.0, 10.0);
-
-    for (int i = 0; i < moods.length; i++) {
-      final double x = i * stepX;
-      final double normalizedY = 1 - ((moods[i] - minY) / rangeY);
-      final double y = normalizedY * size.height;
-
+    for (var i = 0; i < values.length; i++) {
+      final x = i / (values.length - 1) * size.width;
+      final y = size.height - ((values[i] - minV) / range) * size.height;
       if (i == 0) {
         path.moveTo(x, y);
       } else {
         path.lineTo(x, y);
       }
     }
-
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round;
     canvas.drawPath(path, paint);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _MiniSparklinePainter oldDelegate) =>
+      oldDelegate.values != values || oldDelegate.color != color;
 }

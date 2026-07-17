@@ -123,10 +123,26 @@ linkRouter.get("/groups/:psychiatristId", async (req: Request, res: Response) =>
     const groups = await prisma.joinGroup.findMany({
       where: { psychiatrist_id: String(req.params.psychiatristId ?? "") },
       orderBy: { created_at: "desc" },
-      include: { _count: { select: { care_links: true } } },
+      include: {
+        _count: { select: { care_links: true } },
+        care_links: {
+          orderBy: { created_at: "desc" },
+          take: 8,
+          select: {
+            patient_id: true,
+            patient_name: true,
+          },
+        },
+      },
     });
     return res.json({
-      groups: groups.map(serializeGroup),
+      groups: groups.map((g) => ({
+        ...serializeGroup(g),
+        members_preview: g.care_links.map((l) => ({
+          patient_id: l.patient_id,
+          patient_name: l.patient_name ?? "Patient",
+        })),
+      })),
     });
   } catch (error) {
     console.error("List groups error:", error);
@@ -134,15 +150,142 @@ linkRouter.get("/groups/:psychiatristId", async (req: Request, res: Response) =>
   }
 });
 
-linkRouter.patch("/groups/:groupId", async (req: Request, res: Response) => {
-  const { is_active } = req.body as { is_active?: boolean };
-  if (typeof is_active !== "boolean") {
-    return res.status(400).json({ error: "is_active boolean required" });
+linkRouter.get("/groups/:groupId/members", async (req: Request, res: Response) => {
+  const groupId = String(req.params.groupId ?? "");
+  const psychiatristId =
+    typeof req.query.psychiatrist_id === "string"
+      ? req.query.psychiatrist_id
+      : "";
+
+  if (!groupId) {
+    return res.status(400).json({ error: "groupId is required." });
   }
+
   try {
+    const group = await prisma.joinGroup.findUnique({ where: { id: groupId } });
+    if (!group) {
+      return res.status(404).json({ error: "Join group not found." });
+    }
+    if (psychiatristId && group.psychiatrist_id !== psychiatristId) {
+      return res.status(403).json({ error: "Not allowed to view this group." });
+    }
+
+    const links = await prisma.careLink.findMany({
+      where: { join_group_id: groupId },
+      orderBy: { created_at: "desc" },
+    });
+
+    const patientIds = links.map((l) => l.patient_id);
+    const users =
+      patientIds.length > 0
+        ? await prisma.user.findMany({ where: { id: { in: patientIds } } })
+        : [];
+    const userById = Object.fromEntries(users.map((u) => [u.id, u]));
+
+    const meds =
+      patientIds.length > 0
+        ? await prisma.medication.findMany({
+            where: {
+              patient_id: { in: patientIds },
+              is_active: true,
+            },
+            orderBy: { created_at: "desc" },
+          })
+        : [];
+
+    const diaryCounts =
+      patientIds.length > 0
+        ? await prisma.diaryEntry.groupBy({
+            by: ["patient_id"],
+            where: { patient_id: { in: patientIds } },
+            _count: { _all: true },
+          })
+        : [];
+    const diaryByPatient = Object.fromEntries(
+      diaryCounts.map((d) => [d.patient_id, d._count._all]),
+    );
+
+    const medsByPatient = new Map<string, typeof meds>();
+    for (const m of meds) {
+      const list = medsByPatient.get(m.patient_id) ?? [];
+      list.push(m);
+      medsByPatient.set(m.patient_id, list);
+    }
+
+    return res.json({
+      group: serializeGroup({
+        ...group,
+        member_count: links.length,
+      }),
+      members: links.map((l) => {
+        const user = userById[l.patient_id];
+        const patientMeds = medsByPatient.get(l.patient_id) ?? [];
+        return {
+          link_id: l.id,
+          patient_id: l.patient_id,
+          patient_name: l.patient_name ?? user?.full_name ?? "Patient",
+          email: user?.email ?? null,
+          status: l.status,
+          monitoring_on: l.monitoring_on,
+          linked_at: l.created_at,
+          diary_entries: diaryByPatient[l.patient_id] ?? 0,
+          active_meds_count: patientMeds.length,
+          medications: patientMeds.map((m) => ({
+            id: m.id,
+            name: m.name,
+            dosage_and_freq: m.dosage_and_freq,
+            is_active: m.is_active,
+            created_at: m.created_at,
+          })),
+        };
+      }),
+    });
+  } catch (error) {
+    console.error("List group members error:", error);
+    return res.status(500).json({ error: "Failed to list group members." });
+  }
+});
+
+linkRouter.patch("/groups/:groupId", async (req: Request, res: Response) => {
+  const { is_active, name, psychiatrist_id } = req.body as {
+    is_active?: boolean;
+    name?: string;
+    psychiatrist_id?: string;
+  };
+
+  if (typeof is_active !== "boolean" && typeof name !== "string") {
+    return res.status(400).json({
+      error: "Provide is_active (boolean) and/or name (string).",
+    });
+  }
+
+  const groupId = String(req.params.groupId ?? "");
+  if (!groupId) {
+    return res.status(400).json({ error: "groupId is required." });
+  }
+
+  try {
+    const existing = await prisma.joinGroup.findUnique({ where: { id: groupId } });
+    if (!existing) {
+      return res.status(404).json({ error: "Join group not found." });
+    }
+    if (psychiatrist_id && existing.psychiatrist_id !== psychiatrist_id) {
+      return res.status(403).json({ error: "Not allowed to update this group." });
+    }
+
+    const data: { is_active?: boolean; name?: string } = {};
+    if (typeof is_active === "boolean") data.is_active = is_active;
+    if (typeof name === "string") {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        return res.status(400).json({ error: "name cannot be empty." });
+      }
+      data.name = trimmed.slice(0, 80);
+    }
+
     const group = await prisma.joinGroup.update({
-      where: { id: String(req.params.groupId ?? "") },
-      data: { is_active },
+      where: { id: groupId },
+      data,
       include: { _count: { select: { care_links: true } } },
     });
     return res.json({
@@ -151,6 +294,68 @@ linkRouter.patch("/groups/:groupId", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Patch group error:", error);
     return res.status(500).json({ error: "Failed to update join group." });
+  }
+});
+
+linkRouter.post("/groups/:groupId/regenerate", async (req: Request, res: Response) => {
+  const groupId = String(req.params.groupId ?? "");
+  const {
+    psychiatrist_id,
+    expires_in_minutes,
+  } = req.body as {
+    psychiatrist_id?: string;
+    expires_in_minutes?: number | null;
+  };
+
+  if (!groupId) {
+    return res.status(400).json({ error: "groupId is required." });
+  }
+  if (!psychiatrist_id) {
+    return res.status(400).json({ error: "psychiatrist_id is required." });
+  }
+
+  let expiresAt: Date | null;
+  try {
+    expiresAt = resolveExpiresAt(expires_in_minutes);
+  } catch {
+    return res.status(400).json({
+      error: "expires_in_minutes must be 15, 60, 1440, 10080, or null (never).",
+    });
+  }
+
+  try {
+    const existing = await prisma.joinGroup.findUnique({ where: { id: groupId } });
+    if (!existing) {
+      return res.status(404).json({ error: "Join group not found." });
+    }
+    if (existing.psychiatrist_id !== psychiatrist_id) {
+      return res.status(403).json({ error: "Not allowed to regenerate this code." });
+    }
+
+    let code = generateCode();
+    for (let i = 0; i < 8; i++) {
+      const taken = await prisma.joinGroup.findUnique({ where: { code } });
+      if (!taken) break;
+      code = generateCode();
+    }
+
+    const group = await prisma.joinGroup.update({
+      where: { id: groupId },
+      data: {
+        code,
+        expires_at: expiresAt,
+        is_active: true,
+      },
+      include: { _count: { select: { care_links: true } } },
+    });
+
+    return res.json({
+      message: "Invite code regenerated.",
+      group: serializeGroup(group),
+    });
+  } catch (error) {
+    console.error("Regenerate group code error:", error);
+    return res.status(500).json({ error: "Failed to regenerate join code." });
   }
 });
 

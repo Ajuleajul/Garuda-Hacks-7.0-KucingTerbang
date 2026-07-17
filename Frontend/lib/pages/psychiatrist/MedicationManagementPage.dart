@@ -94,6 +94,21 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
     }).toList();
   }
 
+  List<MapEntry<String, List<MedicationModel>>> get _medsByGroup {
+    final map = <String, List<MedicationModel>>{};
+    for (final med in _filteredMeds) {
+      final key = _groupNameFor(med.patientId) ?? 'Ungrouped';
+      map.putIfAbsent(key, () => []).add(med);
+    }
+    final entries = map.entries.toList();
+    entries.sort((a, b) {
+      if (a.key == 'Ungrouped') return 1;
+      if (b.key == 'Ungrouped') return -1;
+      return a.key.toLowerCase().compareTo(b.key.toLowerCase());
+    });
+    return entries;
+  }
+
   Future<void> _deactivate(MedicationModel med) async {
     try {
       await MedicationService.instance.updateMedication(
@@ -352,21 +367,30 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
                 ),
               )
             else
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _filteredMeds.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 16),
-                itemBuilder: (context, index) {
-                  final med = _filteredMeds[index];
-                  return _MedicationCard(
-                    data: med,
-                    groupName: _groupNameFor(med.patientId),
-                    onTap: () => _showPrescriptionModal(existing: med),
-                    onDelete: () => _deactivate(med),
-                  );
-                },
-              ),
+              ..._medsByGroup.map((entry) {
+                final groupName = entry.key;
+                final meds = entry.value;
+                final patientIds = meds.map((m) => m.patientId).toSet();
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: _PrescriptionGroupSection(
+                    groupName: groupName,
+                    prescriptionCount: meds.length,
+                    patientCount: patientIds.length,
+                    children: [
+                      for (var i = 0; i < meds.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 10),
+                        _MedicationCard(
+                          data: meds[i],
+                          onTap: () =>
+                              _showPrescriptionModal(existing: meds[i]),
+                          onDelete: () => _deactivate(meds[i]),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              }),
           ],
         ),
       ),
@@ -482,15 +506,88 @@ class _PatientTile extends StatelessWidget {
   }
 }
 
+class _PrescriptionGroupSection extends StatelessWidget {
+  const _PrescriptionGroupSection({
+    required this.groupName,
+    required this.prescriptionCount,
+    required this.patientCount,
+    required this.children,
+  });
+
+  final String groupName;
+  final int prescriptionCount;
+  final int patientCount;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      decoration: BoxDecoration(
+        color: CuramindColors.mistBlue.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: CuramindColors.mistBlue),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 4,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: CuramindColors.ocean,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      groupName,
+                      style: GoogleFonts.outfit(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: CuramindColors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$prescriptionCount prescription${prescriptionCount == 1 ? '' : 's'}'
+                      ' · $patientCount patient${patientCount == 1 ? '' : 's'}',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: CuramindColors.inkMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.groups_2_outlined,
+                size: 20,
+                color: CuramindColors.ocean.withValues(alpha: 0.7),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
 class _MedicationCard extends StatelessWidget {
   final MedicationModel data;
-  final String? groupName;
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
   const _MedicationCard({
     required this.data,
-    required this.groupName,
     required this.onTap,
     required this.onDelete,
   });
@@ -499,116 +596,102 @@ class _MedicationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: CuramindColors.white,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: CuramindColors.sageSoft.withValues(alpha: 0.5),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: CuramindColors.slate.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
+        borderRadius: BorderRadius.circular(14),
+        child: IntrinsicHeight(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          data.patientName,
-                          style: GoogleFonts.outfit(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: CuramindColors.ink,
+              Container(
+                width: 5,
+                decoration: const BoxDecoration(
+                  color: CuramindColors.sageDeep,
+                  borderRadius: BorderRadius.horizontal(
+                    left: Radius.circular(14),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 8, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              data.name,
+                              style: GoogleFonts.outfit(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: CuramindColors.ink,
+                              ),
+                            ),
                           ),
-                        ),
-                        if (groupName != null && groupName!.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            groupName!,
-                            style: GoogleFonts.outfit(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: CuramindColors.ocean,
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: CuramindColors.sageSoft.withValues(
+                                alpha: 0.55,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'Active',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: CuramindColors.sageDeep,
+                              ),
                             ),
                           ),
                         ],
-                        const SizedBox(height: 6),
-                        Text(
-                          data.name,
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CuramindColors.mist,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          data.dosageAndFreq,
                           style: GoogleFonts.outfit(
-                            fontSize: 15,
+                            fontSize: 13,
                             fontWeight: FontWeight.w500,
                             color: CuramindColors.slate,
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          data.dosageAndFreq,
-                          style: GoogleFonts.outfit(
-                            fontSize: 14,
-                            color: CuramindColors.inkMuted,
-                          ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        data.patientName,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          color: CuramindColors.inkMuted,
                         ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: CuramindColors.sageSoft.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      'Active',
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: CuramindColors.sageDeep,
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Text(
-                    'Tap to edit',
-                    style: GoogleFonts.outfit(
-                      fontSize: 12,
-                      color: CuramindColors.inkMuted,
-                    ),
-                  ),
-                  const Spacer(),
-                  CursorHoverRegion(
-                    child: FilledButton.icon(
-                      onPressed: onDelete,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: CuramindColors.danger,
-                      ),
-                      icon: const Icon(Icons.block_rounded, size: 18),
-                      label: const Text('Deactivate'),
-                    ),
-                  ),
-                ],
+              CursorHoverRegion(
+                child: IconButton(
+                  onPressed: onDelete,
+                  tooltip: 'Deactivate',
+                  icon: const Icon(Icons.block_rounded),
+                  color: CuramindColors.danger,
+                ),
               ),
             ],
           ),

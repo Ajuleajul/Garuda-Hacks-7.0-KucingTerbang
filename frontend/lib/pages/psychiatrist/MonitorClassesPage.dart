@@ -14,45 +14,48 @@ class MonitorClassesPage extends StatefulWidget {
 }
 
 class _MonitorClassesPageState extends State<MonitorClassesPage> {
-  final List<JoinGroup> _dummyGroups = [
-    JoinGroup(
-      id: '1',
-      code: 'CURA-AXB9',
-      name: 'Intensive Outpatient Cohort A',
-      psychiatristId: 'psy-1',
-      isActive: true,
-      memberCount: 5,
-      createdAt: DateTime.now().subtract(const Duration(days: 30)),
-    ),
-    JoinGroup(
-      id: '2',
-      code: 'CURA-M7T2',
-      name: 'DBT Skills Group (Tuesdays)',
-      psychiatristId: 'psy-1',
-      isActive: true,
-      memberCount: 8,
-      createdAt: DateTime.now().subtract(const Duration(days: 15)),
-    ),
-    JoinGroup(
-      id: '3',
-      code: 'CURA-K9L4',
-      name: 'Adolescent Support Group',
-      psychiatristId: 'psy-1',
-      isActive: true,
-      memberCount: 4,
-      createdAt: DateTime.now().subtract(const Duration(days: 5)),
-    ),
-  ];
+  List<JoinGroup> _groups = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final groups = await LinkService.instance.listMyGroups();
+      if (!mounted) return;
+      setState(() {
+        _groups = groups;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final content = Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final content = RefreshIndicator(
+      onRefresh: _load,
+      color: CuramindColors.sageDeep,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
         children: [
           Text(
-            'Classes',
+            'Emotion monitor',
             style: GoogleFonts.fraunces(
               fontSize: 28,
               fontWeight: FontWeight.w600,
@@ -62,23 +65,58 @@ class _MonitorClassesPageState extends State<MonitorClassesPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Select a class to monitor your patients.',
+            'Pick a care group to review mood, urges, and diary trends for linked patients.',
             style: GoogleFonts.outfit(
               fontSize: 15,
               color: CuramindColors.inkMuted,
+              height: 1.4,
             ),
           ),
-          const SizedBox(height: 24),
-          Expanded(
-            child: ListView.separated(
-              itemCount: _dummyGroups.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 16),
-              itemBuilder: (context, index) {
-                final group = _dummyGroups[index];
-                return _ClassCard(group: group);
-              },
+          const SizedBox(height: 20),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 48),
+              child: Center(
+                child: CircularProgressIndicator(color: CuramindColors.sageDeep),
+              ),
+            )
+          else if (_error != null)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(color: CuramindColors.inkMuted),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(onPressed: _load, child: const Text('Retry')),
+                ],
+              ),
+            )
+          else if (_groups.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: CuramindColors.mistBlue.withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                'No care groups yet. Create a group under Groups, invite patients, then monitor them here.',
+                style: GoogleFonts.outfit(
+                  color: CuramindColors.inkMuted,
+                  height: 1.4,
+                ),
+              ),
+            )
+          else
+            ..._groups.map(
+              (g) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _GroupMonitorCard(group: g),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -89,7 +127,10 @@ class _MonitorClassesPageState extends State<MonitorClassesPage> {
     return Scaffold(
       backgroundColor: CuramindColors.mist,
       appBar: AppBar(
-        title: Text('Classes', style: GoogleFonts.outfit(color: CuramindColors.ink)),
+        title: Text(
+          'Monitor',
+          style: GoogleFonts.outfit(color: CuramindColors.ink),
+        ),
         backgroundColor: CuramindColors.mist,
         elevation: 0,
         iconTheme: const IconThemeData(color: CuramindColors.ink),
@@ -99,13 +140,20 @@ class _MonitorClassesPageState extends State<MonitorClassesPage> {
   }
 }
 
-class _ClassCard extends StatelessWidget {
-  final JoinGroup group;
+class _GroupMonitorCard extends StatelessWidget {
+  const _GroupMonitorCard({required this.group});
 
-  const _ClassCard({required this.group});
+  final JoinGroup group;
 
   @override
   Widget build(BuildContext context) {
+    final names = group.membersPreview.map((m) => m.patientName).toList();
+    final preview = names.isEmpty
+        ? 'No patients linked yet'
+        : group.memberCount > names.length
+            ? '${names.join(', ')} +${group.memberCount - names.length} more'
+            : names.join(', ');
+
     return Material(
       color: CuramindColors.white,
       borderRadius: BorderRadius.circular(16),
@@ -114,25 +162,31 @@ class _ClassCard extends StatelessWidget {
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => const PatientMonitoringDashboard(embedded: false),
+              builder: (_) => PatientMonitoringDashboard(group: group),
             ),
           );
         },
         child: Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             border: Border.all(color: CuramindColors.mistBlue),
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: CuramindColors.slate.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
           ),
           child: Row(
             children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: CuramindColors.mistBlue.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.monitor_heart_outlined,
+                  color: CuramindColors.ocean,
+                ),
+              ),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -140,23 +194,39 @@ class _ClassCard extends StatelessWidget {
                     Text(
                       group.name,
                       style: GoogleFonts.outfit(
-                        fontSize: 18,
+                        fontSize: 17,
                         fontWeight: FontWeight.w700,
                         color: CuramindColors.ink,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Code: ${group.code} • ${group.memberCount} Patients',
+                      '${group.memberCount} patient'
+                      '${group.memberCount == 1 ? '' : 's'}'
+                      ' · ${group.isActive && !group.isExpired ? 'Invite active' : 'Invite closed'}',
                       style: GoogleFonts.outfit(
-                        fontSize: 14,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: CuramindColors.sageDeep,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      preview,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
                         color: CuramindColors.inkMuted,
                       ),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: CuramindColors.inkMuted),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: CuramindColors.inkMuted,
+              ),
             ],
           ),
         ),
