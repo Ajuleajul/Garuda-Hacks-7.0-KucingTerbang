@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../pages/patient/AuthGate.dart';
 import '../pages/patient/ClinicianLinkPage.dart';
@@ -21,6 +22,8 @@ class PatientShell extends StatefulWidget {
   final String displayName;
   final int initialIndex;
 
+  static const tabPrefsKey = 'curamind_patient_tab_index';
+
   static const destinations = [
     NavDestination(label: 'Home', icon: Icons.home_outlined),
     NavDestination(label: 'Diary', icon: Icons.edit_note_outlined),
@@ -42,9 +45,23 @@ class _PatientShellState extends State<PatientShell> {
   void initState() {
     super.initState();
     _index = widget.initialIndex.clamp(0, PatientShell.destinations.length - 1);
+    _restoreTab();
   }
 
-  void _go(int i) => setState(() => _index = i);
+  Future<void> _restoreTab() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getInt(PatientShell.tabPrefsKey);
+    if (saved == null || !mounted) return;
+    final next = saved.clamp(0, PatientShell.destinations.length - 1);
+    if (next != _index) setState(() => _index = next);
+  }
+
+  void _go(int i) {
+    setState(() => _index = i);
+    SharedPreferences.getInstance().then(
+      (prefs) => prefs.setInt(PatientShell.tabPrefsKey, i),
+    );
+  }
 
   void _signOut() {
     Navigator.of(context).pushAndRemoveUntil(

@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../services/auth_service.dart';
 import '../../services/profile_photo_service.dart';
 import '../../theme/curamind_theme.dart';
+import '../../widgets/notification_settings_card.dart';
 import '../patient/AuthGate.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -214,6 +215,8 @@ class _ProfilePageState extends State<ProfilePage> {
                       ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2.4, color: CuramindColors.white))
                       : const Text('Save profile'),
                 ),
+                const SizedBox(height: 28),
+                const NotificationSettingsCard(),
                 const SizedBox(height: 36),
                 Text('Change Password', textAlign: TextAlign.center, style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w600, color: CuramindColors.ink)),
                 const SizedBox(height: 18),

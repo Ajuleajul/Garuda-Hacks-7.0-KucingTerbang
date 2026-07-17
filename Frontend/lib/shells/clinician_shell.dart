@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../pages/patient/AuthGate.dart';
 import '../pages/psychiatrist/HomePage.dart';
@@ -20,6 +21,8 @@ class ClinicianShell extends StatefulWidget {
 
   final String displayName;
   final int initialIndex;
+
+  static const tabPrefsKey = 'curamind_clinician_tab_index';
 
   static const destinations = [
     NavDestination(label: 'Home', icon: Icons.home_outlined),
@@ -43,9 +46,23 @@ class _ClinicianShellState extends State<ClinicianShell> {
     super.initState();
     _index =
         widget.initialIndex.clamp(0, ClinicianShell.destinations.length - 1);
+    _restoreTab();
   }
 
-  void _go(int i) => setState(() => _index = i);
+  Future<void> _restoreTab() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getInt(ClinicianShell.tabPrefsKey);
+    if (saved == null || !mounted) return;
+    final next = saved.clamp(0, ClinicianShell.destinations.length - 1);
+    if (next != _index) setState(() => _index = next);
+  }
+
+  void _go(int i) {
+    setState(() => _index = i);
+    SharedPreferences.getInstance().then(
+      (prefs) => prefs.setInt(ClinicianShell.tabPrefsKey, i),
+    );
+  }
 
   void _signOut() {
     Navigator.of(context).pushAndRemoveUntil(

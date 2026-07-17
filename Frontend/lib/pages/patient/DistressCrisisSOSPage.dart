@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../theme/curamind_theme.dart';
+import '../../utils/phone_dialer.dart';
 
 class DistressCrisisSOSPage extends StatefulWidget {
   const DistressCrisisSOSPage({super.key});
@@ -51,8 +52,8 @@ class _DistressCrisisSOSPageState extends State<DistressCrisisSOSPage>
   bool _savingContact = false;
   int _groundTick = 0;
 
-  static const _crisisLine = 'Local crisis line';
-  static const _crisisPhone = '119 (or your local number)';
+  static const _crisisLine = 'Crisis / ambulance';
+  static const _crisisPhone = '119';
   static const _emergencyLabel = 'Emergency services';
   static const _emergencyNumber = '112';
 
@@ -134,15 +135,30 @@ class _DistressCrisisSOSPageState extends State<DistressCrisisSOSPage>
     super.dispose();
   }
 
-  Future<void> _copy(String label, String value) async {
-    await Clipboard.setData(ClipboardData(text: value));
+  Future<void> _openNumber(String label, String value) async {
+    final ok = await openDialerPrefill(value);
+    if (!mounted) return;
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: CuramindColors.ocean.withValues(alpha: 0.92),
+          content: Text(
+            '$label ready in your dialer. You still choose when to call.',
+            style: GoogleFonts.outfit(color: CuramindColors.white),
+          ),
+        ),
+      );
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: digitsForDialer(value)));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
         backgroundColor: CuramindColors.ocean.withValues(alpha: 0.92),
         content: Text(
-          '$label copied. Paste it in Phone when you are ready.',
+          'Could not open dialer. $label copied so you can paste it.',
           style: GoogleFonts.outfit(color: CuramindColors.white),
         ),
       ),
@@ -173,8 +189,8 @@ class _DistressCrisisSOSPageState extends State<DistressCrisisSOSPage>
               ),
               const SizedBox(height: 10),
               Text(
-                'Nothing will dial by itself. If you continue, we only show '
-                'the number so you can call when you choose.',
+                'Nothing will dial by itself. Next we open your phone dialer '
+                'with $_emergencyNumber filled in — you place the call.',
                 style: GoogleFonts.outfit(
                   fontSize: 14,
                   height: 1.45,
@@ -189,7 +205,7 @@ class _DistressCrisisSOSPageState extends State<DistressCrisisSOSPage>
                   foregroundColor: CuramindColors.white,
                   minimumSize: const Size.fromHeight(50),
                 ),
-                child: const Text('Show emergency number'),
+                child: const Text('Open dialer with 112'),
               ),
               const SizedBox(height: 8),
               TextButton(
@@ -203,69 +219,7 @@ class _DistressCrisisSOSPageState extends State<DistressCrisisSOSPage>
     );
 
     if (go != true || !mounted) return;
-
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFFF2F6F7),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(
-            _emergencyLabel,
-            style: GoogleFonts.fraunces(
-              fontWeight: FontWeight.w600,
-              color: CuramindColors.ink.withValues(alpha: 0.88),
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Number',
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  color: CuramindColors.inkMuted,
-                ),
-              ),
-              const SizedBox(height: 4),
-              SelectableText(
-                _emergencyNumber,
-                style: GoogleFonts.outfit(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w600,
-                  color: CuramindColors.ocean,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Open your Phone app and dial when you feel ready. '
-                'Curamind will not place the call for you.',
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  height: 1.4,
-                  color: CuramindColors.inkMuted,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _copy('Emergency number', _emergencyNumber);
-              },
-              child: const Text('Copy number'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    );
+    await _openNumber(_emergencyLabel, _emergencyNumber);
   }
 
   void _leave() {
@@ -494,11 +448,12 @@ class _DistressCrisisSOSPageState extends State<DistressCrisisSOSPage>
                             ),
                           ),
                           const SizedBox(height: 12),
-                          OutlinedButton(
-                            onPressed: () => _copy(
+                          OutlinedButton.icon(
+                            onPressed: () => _openNumber(
                               'Safe person number',
                               _safePhoneController.text,
                             ),
+                            icon: const Icon(Icons.phone_outlined, size: 18),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: CuramindColors.ocean,
                               side: BorderSide(
@@ -507,7 +462,7 @@ class _DistressCrisisSOSPageState extends State<DistressCrisisSOSPage>
                               ),
                               minimumSize: const Size.fromHeight(46),
                             ),
-                            child: const Text('Copy number'),
+                            label: const Text('Open in dialer'),
                           ),
                           const SizedBox(height: 8),
                           TextButton(
@@ -517,12 +472,23 @@ class _DistressCrisisSOSPageState extends State<DistressCrisisSOSPage>
                           ),
                         ],
                         const SizedBox(height: 8),
-                        Text(
-                          '$_crisisLine · $_crisisPhone',
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            height: 1.4,
-                            color: muted,
+                        InkWell(
+                          onTap: () =>
+                              _openNumber(_crisisLine, _crisisPhone),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Text(
+                              '$_crisisLine · $_crisisPhone — tap to open dialer',
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                height: 1.4,
+                                color: CuramindColors.ocean,
+                                decoration: TextDecoration.underline,
+                                decorationColor:
+                                    CuramindColors.ocean.withValues(alpha: 0.45),
+                              ),
+                            ),
                           ),
                         ),
                       ],

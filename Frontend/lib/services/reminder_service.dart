@@ -412,4 +412,38 @@ class ReminderService {
       if (kDebugMode) debugPrint('Show notification failed: $e');
     }
   }
+
+  Future<bool> sendTestNotification() async {
+    await init();
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      await android?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _channelId,
+          'Curamind reminders',
+          description: 'Diary and medication reminders',
+          importance: Importance.high,
+        ),
+      );
+    }
+    final allowed = await areNotificationsAllowed();
+    if (!allowed) {
+      final granted = await requestPermission();
+      if (!granted) return false;
+    }
+    try {
+      await _plugin.show(
+        id: 9001,
+        title: 'Curamind test',
+        body:
+            'Notifications are working. Diary and med reminders will use this channel.',
+        notificationDetails: _details(),
+      );
+      return true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Test notification failed: $e');
+      return false;
+    }
+  }
 }

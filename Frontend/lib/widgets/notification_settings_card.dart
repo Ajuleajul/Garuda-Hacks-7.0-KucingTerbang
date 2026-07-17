@@ -117,6 +117,30 @@ class _NotificationSettingsCardState extends State<NotificationSettingsCard> {
     await _persist(_settings.copyWith(medTimes: next));
   }
 
+  Future<void> _sendTest() async {
+    setState(() => _busy = true);
+    final ok = await ReminderService.instance.sendTestNotification();
+    final allowed = await ReminderService.instance.areNotificationsAllowed();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _permissionGranted = allowed;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor:
+            ok ? CuramindColors.sageDeep : CuramindColors.danger,
+        content: Text(
+          ok
+              ? 'Test notification sent. Check your system tray or notification shade.'
+              : 'Could not show a notification. Enable permission and try again.',
+          style: GoogleFonts.outfit(color: CuramindColors.white),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -126,10 +150,12 @@ class _NotificationSettingsCardState extends State<NotificationSettingsCard> {
       );
     }
 
-    return Container(
+    return Material(
+      color: CuramindColors.white.withValues(alpha: 0.82),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: CuramindColors.white.withValues(alpha: 0.82),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: CuramindColors.mistBlue),
       ),
@@ -175,6 +201,19 @@ class _NotificationSettingsCardState extends State<NotificationSettingsCard> {
             value: _settings.masterEnabled,
             activeThumbColor: CuramindColors.sageDeep,
             onChanged: _busy ? null : _toggleMaster,
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _sendTest,
+            icon: const Icon(Icons.notifications_active_outlined, size: 18),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: CuramindColors.sageDeep,
+              side: BorderSide(
+                color: CuramindColors.sageDeep.withValues(alpha: 0.45),
+              ),
+              minimumSize: const Size.fromHeight(46),
+            ),
+            label: const Text('Send test notification'),
           ),
           if (_settings.masterEnabled) ...[
             const Divider(),
@@ -257,6 +296,7 @@ class _NotificationSettingsCardState extends State<NotificationSettingsCard> {
           ],
         ],
       ),
+    ),
     );
   }
 }

@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:frontend/pages/patient/ClinicianLinkPage.dart';
-import 'package:frontend/pages/patient/HomePage.dart';
-import 'package:frontend/pages/psychiatrist/ClinicianJoinCodesPage.dart';
-import 'package:frontend/pages/psychiatrist/DualBivariateDashboard.dart';
-import 'package:frontend/pages/psychiatrist/ExportClinicalReportPage.dart';
-import 'package:frontend/pages/psychiatrist/HomePage.dart';
-import 'package:frontend/pages/psychiatrist/MedicationManagementPage.dart';
-import 'package:frontend/pages/psychiatrist/MonitorClassesPage.dart';
-import 'package:frontend/theme/curamind_theme.dart';
+import 'package:curamind/pages/patient/ClinicianLinkPage.dart';
+import 'package:curamind/pages/patient/HomePage.dart';
+import 'package:curamind/pages/psychiatrist/ClinicianJoinCodesPage.dart';
+import 'package:curamind/pages/psychiatrist/DualBivariateDashboard.dart';
+import 'package:curamind/pages/psychiatrist/ExportClinicalReportPage.dart';
+import 'package:curamind/pages/psychiatrist/HomePage.dart';
+import 'package:curamind/pages/psychiatrist/MedicationManagementPage.dart';
+import 'package:curamind/pages/psychiatrist/MonitorClassesPage.dart';
+import 'package:curamind/theme/curamind_theme.dart';
 
 Widget _wrap(Widget child) {
   return MaterialApp(
