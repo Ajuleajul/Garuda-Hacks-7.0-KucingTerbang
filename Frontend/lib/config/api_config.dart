@@ -1,17 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-/// Backend base URL for all Flutter targets (web, mobile, desktop).
-///
-/// Resolution order:
-/// 1. `--dart-define=API_BASE_URL=...` (CI / release builds)
-/// 2. `API_BASE_URL` in `.env` (runtime — use this for physical devices)
-/// 3. Platform defaults:
-///    - Android emulator → `http://10.0.2.2:3000`
-///    - iOS Simulator / desktop / web → `http://localhost:3000`
-///
-/// Physical phone/tablet: set in `Frontend/.env`, e.g.
-/// `API_BASE_URL=http://192.168.1.20:3000` (your PC LAN IP).
 class ApiConfig {
   static String get baseUrl {
     const fromDefine = String.fromEnvironment('API_BASE_URL');
@@ -24,9 +13,7 @@ class ApiConfig {
       if (fromDotenv != null && fromDotenv.isNotEmpty) {
         return _normalize(fromDotenv);
       }
-    } catch (_) {
-      // dotenv not loaded yet — fall through to defaults
-    }
+    } catch (_) {}
 
     return _normalize(_platformDefault);
   }
@@ -36,8 +23,6 @@ class ApiConfig {
 
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
-        // Emulator reaches host machine via 10.0.2.2.
-        // Physical Android: override with API_BASE_URL in .env.
         return 'http://10.0.2.2:3000';
       case TargetPlatform.iOS:
       case TargetPlatform.macOS:
