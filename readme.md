@@ -209,6 +209,17 @@ List devices:
 flutter devices
 ```
 
+### Demo / testing accounts
+
+Use these accounts to try the app after setup (already registered in our Supabase project):
+
+| Role | Email | Password |
+|------|--------|----------|
+| Patient | `patient01@garudahacks.com` | `password123` |
+| Psychiatrist | `doctor01@garudahacks.com` | `password123` |
+
+On the patient **Link** tab you can connect with join code **`CURA-DEMO`** if the demo seed has been run (`npm run seed:demo` in `Backend`).
+
 ## 5. Quick start (both together)
 
 Terminal 1:
