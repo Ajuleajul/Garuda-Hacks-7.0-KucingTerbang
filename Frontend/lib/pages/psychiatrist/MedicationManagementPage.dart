@@ -24,6 +24,7 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
   bool _loading = true;
   String? _error;
   String _searchQuery = '';
+  String? _selectedPatientId;
   List<MedicationModel> _meds = const [];
   List<LinkedPatient> _patients = const [];
 
@@ -66,13 +67,30 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
     }
   }
 
+  String? _groupNameFor(String patientId) {
+    for (final p in _patients) {
+      if (p.patientId == patientId) {
+        final name = p.groupName?.trim();
+        if (name != null && name.isNotEmpty) return name;
+      }
+    }
+    return null;
+  }
+
   List<MedicationModel> get _filteredMeds {
-    final active = _meds.where((m) => m.isActive).toList();
+    var active = _meds.where((m) => m.isActive).toList();
+    if (_selectedPatientId != null) {
+      active = active
+          .where((m) => m.patientId == _selectedPatientId)
+          .toList();
+    }
     if (_searchQuery.isEmpty) return active;
     final q = _searchQuery.toLowerCase();
     return active.where((m) {
+      final group = _groupNameFor(m.patientId)?.toLowerCase() ?? '';
       return m.patientName.toLowerCase().contains(q) ||
-          m.name.toLowerCase().contains(q);
+          m.name.toLowerCase().contains(q) ||
+          group.contains(q);
     }).toList();
   }
 
@@ -103,7 +121,10 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
     }
   }
 
-  void _showPrescriptionModal([MedicationModel? existing]) {
+  void _showPrescriptionModal({
+    MedicationModel? existing,
+    String? preselectedPatientId,
+  }) {
     if (_patients.isEmpty && existing == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -125,6 +146,7 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
         return _PrescriptionFormModal(
           patients: _patients,
           initialMed: existing,
+          preselectedPatientId: preselectedPatientId,
           onSaved: () async {
             await _load();
             if (!mounted) return;
@@ -185,7 +207,9 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
                 ),
                 CursorHoverRegion(
                   child: FilledButton.icon(
-                    onPressed: _loading ? null : () => _showPrescriptionModal(),
+                    onPressed: _loading
+                        ? null
+                        : () => _showPrescriptionModal(),
                     icon: const Icon(Icons.add_rounded, size: 20),
                     label: const Text('New prescription'),
                     style: FilledButton.styleFrom(
@@ -219,7 +243,7 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
                     child: TextField(
                       onChanged: (val) => setState(() => _searchQuery = val),
                       decoration: InputDecoration(
-                        hintText: 'Search patient or medication...',
+                        hintText: 'Search patient, group, or medication...',
                         hintStyle: GoogleFonts.outfit(
                           color: CuramindColors.inkMuted,
                         ),
@@ -233,35 +257,62 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Text(
-              '${_patients.length} linked patient${_patients.length == 1 ? '' : 's'} from care groups',
+              'Linked patients',
               style: GoogleFonts.outfit(
-                fontSize: 13,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: CuramindColors.ink,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Tap a card to prescribe. Tap again to clear filter.',
+              style: GoogleFonts.outfit(
+                fontSize: 12,
                 color: CuramindColors.inkMuted,
               ),
             ),
             if (_patients.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _patients.map((p) {
-                  final group = p.groupCode ?? p.groupName;
-                  return Chip(
-                    label: Text(
-                      group == null || group.isEmpty
-                          ? p.patientName
-                          : '${p.patientName} · $group',
-                    ),
-                    backgroundColor: CuramindColors.mistBlue.withValues(alpha: 0.5),
-                    labelStyle: GoogleFonts.outfit(
-                      fontSize: 12,
-                      color: CuramindColors.ink,
-                    ),
-                    side: BorderSide.none,
-                  );
-                }).toList(),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 108,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _patients.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 10),
+                  itemBuilder: (context, i) {
+                    final p = _patients[i];
+                    final selected = _selectedPatientId == p.patientId;
+                    final groupLabel =
+                        (p.groupName?.trim().isNotEmpty == true)
+                            ? p.groupName!.trim()
+                            : 'Care group';
+                    final medCount = _meds
+                        .where((m) => m.isActive && m.patientId == p.patientId)
+                        .length;
+                    return CursorHoverRegion(
+                      child: _PatientTile(
+                        patientName: p.patientName,
+                        groupName: groupLabel,
+                        medCount: medCount,
+                        selected: selected,
+                        onTap: () {
+                          setState(() {
+                            _selectedPatientId =
+                                selected ? null : p.patientId;
+                          });
+                          if (!selected) {
+                            _showPrescriptionModal(
+                              preselectedPatientId: p.patientId,
+                            );
+                          }
+                        },
+                      ),
+                    );
+                  },
+                ),
               ),
             ],
             const SizedBox(height: 20),
@@ -292,7 +343,9 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
                   child: Text(
                     _patients.isEmpty
                         ? 'No linked patients on the server. Create a join code while Backend is online, then have the patient join again (disconnect first if they joined offline).'
-                        : 'No active prescriptions. Create one for a linked patient.',
+                        : _selectedPatientId != null
+                            ? 'No prescriptions for this patient yet. Use the card above to prescribe.'
+                            : 'No active prescriptions. Tap a patient card to prescribe.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.outfit(color: CuramindColors.slate),
                   ),
@@ -308,7 +361,8 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
                   final med = _filteredMeds[index];
                   return _MedicationCard(
                     data: med,
-                    onEdit: () => _showPrescriptionModal(med),
+                    groupName: _groupNameFor(med.patientId),
+                    onTap: () => _showPrescriptionModal(existing: med),
                     onDelete: () => _deactivate(med),
                   );
                 },
@@ -327,116 +381,238 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
   }
 }
 
+class _PatientTile extends StatelessWidget {
+  const _PatientTile({
+    required this.patientName,
+    required this.groupName,
+    required this.medCount,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String patientName;
+  final String groupName;
+  final int medCount;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? CuramindColors.sageDeep : CuramindColors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          width: 168,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected
+                  ? CuramindColors.sageDeep
+                  : CuramindColors.mistBlue,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.person_outline_rounded,
+                    size: 18,
+                    color: selected
+                        ? CuramindColors.white
+                        : CuramindColors.sageDeep,
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? CuramindColors.white.withValues(alpha: 0.18)
+                          : CuramindColors.mistBlue,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Text(
+                      '$medCount med${medCount == 1 ? '' : 's'}',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: selected
+                            ? CuramindColors.white
+                            : CuramindColors.ocean,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Text(
+                patientName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.outfit(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? CuramindColors.white : CuramindColors.ink,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                groupName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  color: selected
+                      ? CuramindColors.white.withValues(alpha: 0.85)
+                      : CuramindColors.inkMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MedicationCard extends StatelessWidget {
   final MedicationModel data;
-  final VoidCallback onEdit;
+  final String? groupName;
+  final VoidCallback onTap;
   final VoidCallback onDelete;
 
   const _MedicationCard({
     required this.data,
-    required this.onEdit,
+    required this.groupName,
+    required this.onTap,
     required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: CuramindColors.white,
+    return Material(
+      color: CuramindColors.white,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: CuramindColors.sageSoft.withValues(alpha: 0.5),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: CuramindColors.slate.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: CuramindColors.sageSoft.withValues(alpha: 0.5),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: CuramindColors.slate.withValues(alpha: 0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      data.patientName,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          data.patientName,
+                          style: GoogleFonts.outfit(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: CuramindColors.ink,
+                          ),
+                        ),
+                        if (groupName != null && groupName!.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            groupName!,
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: CuramindColors.ocean,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 6),
+                        Text(
+                          data.name,
+                          style: GoogleFonts.outfit(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: CuramindColors.slate,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          data.dosageAndFreq,
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            color: CuramindColors.inkMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: CuramindColors.sageSoft.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      'Active',
                       style: GoogleFonts.outfit(
-                        fontSize: 18,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: CuramindColors.ink,
+                        color: CuramindColors.sageDeep,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      data.name,
-                      style: GoogleFonts.outfit(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: CuramindColors.slate,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      data.dosageAndFreq,
-                      style: GoogleFonts.outfit(
-                        fontSize: 14,
-                        color: CuramindColors.inkMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: CuramindColors.sageSoft.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  'Active',
-                  style: GoogleFonts.outfit(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: CuramindColors.sageDeep,
                   ),
-                ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Text(
+                    'Tap to edit',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: CuramindColors.inkMuted,
+                    ),
+                  ),
+                  const Spacer(),
+                  CursorHoverRegion(
+                    child: FilledButton.icon(
+                      onPressed: onDelete,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: CuramindColors.danger,
+                      ),
+                      icon: const Icon(Icons.block_rounded, size: 18),
+                      label: const Text('Deactivate'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              CursorHoverRegion(
-                child: TextButton.icon(
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_rounded, size: 18),
-                  label: const Text('Edit'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              CursorHoverRegion(
-                child: FilledButton.icon(
-                  onPressed: onDelete,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: CuramindColors.danger,
-                  ),
-                  icon: const Icon(Icons.block_rounded, size: 18),
-                  label: const Text('Deactivate'),
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -445,11 +621,13 @@ class _MedicationCard extends StatelessWidget {
 class _PrescriptionFormModal extends StatefulWidget {
   final List<LinkedPatient> patients;
   final MedicationModel? initialMed;
+  final String? preselectedPatientId;
   final Future<void> Function() onSaved;
 
   const _PrescriptionFormModal({
     required this.patients,
     this.initialMed,
+    this.preselectedPatientId,
     required this.onSaved,
   });
 
@@ -491,6 +669,9 @@ class _PrescriptionFormModalState extends State<_PrescriptionFormModal> {
           _notesController.text = parts.sublist(2).join('·').trim();
         }
       }
+    } else if (widget.preselectedPatientId != null &&
+        widget.patients.any((p) => p.patientId == widget.preselectedPatientId)) {
+      _selectedPatientId = widget.preselectedPatientId;
     } else if (widget.patients.isNotEmpty) {
       _selectedPatientId = widget.patients.first.patientId;
     }
@@ -564,17 +745,20 @@ class _PrescriptionFormModalState extends State<_PrescriptionFormModal> {
   Widget build(BuildContext context) {
     final patientItems = <DropdownMenuItem<String>>[
       ...widget.patients.map(
-        (p) => DropdownMenuItem(
-          value: p.patientId,
-          child: Text(
-            p.groupCode != null && p.groupCode!.isNotEmpty
-                ? '${p.patientName} (${p.groupCode})'
-                : p.patientName,
-          ),
-        ),
+        (p) {
+          final group = p.groupName?.trim();
+          final label = (group != null && group.isNotEmpty)
+              ? '${p.patientName} · $group'
+              : p.patientName;
+          return DropdownMenuItem(
+            value: p.patientId,
+            child: Text(label),
+          );
+        },
       ),
       if (widget.initialMed != null &&
-          !widget.patients.any((p) => p.patientId == widget.initialMed!.patientId))
+          !widget.patients
+              .any((p) => p.patientId == widget.initialMed!.patientId))
         DropdownMenuItem(
           value: widget.initialMed!.patientId,
           child: Text(widget.initialMed!.patientName),
