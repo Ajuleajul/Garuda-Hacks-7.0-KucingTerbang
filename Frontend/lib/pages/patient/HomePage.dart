@@ -5,6 +5,7 @@ import '../../services/diary_service.dart';
 import '../../services/link_service.dart';
 import '../../services/medication_service.dart';
 import '../../theme/curamind_theme.dart';
+import 'CuramindChatPage.dart';
 import 'DistressCrisisSOSPage.dart';
 
 class PatientHomePage extends StatefulWidget {
@@ -189,6 +190,10 @@ class _PatientHomePageState extends State<PatientHomePage> {
                   _SosEntryCard(
                     onOpen: () => DistressCrisisSOSPage.open(context),
                   ),
+                  const SizedBox(height: 10),
+                  _AssistEntryCard(
+                    onOpen: () => CuramindChatPage.open(context),
+                  ),
                   const SizedBox(height: 14),
                   if (_loading)
                     const Padding(
@@ -293,6 +298,12 @@ class _PatientHomePageState extends State<PatientHomePage> {
                   _QuickGrid(
                     items: [
                       _QuickItem(
+                        label: 'Ask Curamind',
+                        hint: 'App help chat',
+                        icon: Icons.chat_bubble_outline_rounded,
+                        onTap: () => CuramindChatPage.open(context),
+                      ),
+                      _QuickItem(
                         label: 'Dashboard',
                         hint: 'Mood × meds',
                         icon: Icons.show_chart_outlined,
@@ -305,13 +316,6 @@ class _PatientHomePageState extends State<PatientHomePage> {
                         icon: Icons.link_outlined,
                         onTap: () =>
                             widget.onNavigate(PatientHomePage.linkIndex),
-                      ),
-                      _QuickItem(
-                        label: 'Breathing',
-                        hint: 'Calm skills',
-                        icon: Icons.air_outlined,
-                        onTap: () => widget
-                            .onNavigate(PatientHomePage.distressIndex),
                       ),
                       _QuickItem(
                         label: 'Profile',
@@ -443,6 +447,80 @@ class _SosEntryCard extends StatelessWidget {
               Icon(
                 Icons.arrow_forward_rounded,
                 color: CuramindColors.danger.withValues(alpha: 0.8),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AssistEntryCard extends StatelessWidget {
+  const _AssistEntryCard({required this.onOpen});
+
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: CuramindColors.sageSoft.withValues(alpha: 0.65),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onOpen,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: CuramindColors.sage.withValues(alpha: 0.4),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: CuramindColors.sageDeep.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.chat_bubble_outline_rounded,
+                  color: CuramindColors.sageDeep,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Ask Curamind',
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: CuramindColors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Chat about diary, meds, reminders, and app features.',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        height: 1.35,
+                        color: CuramindColors.inkMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_rounded,
+                color: CuramindColors.sageDeep.withValues(alpha: 0.85),
               ),
             ],
           ),
