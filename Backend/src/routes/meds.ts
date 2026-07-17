@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { LinkStatus, LogStatus } from "@prisma/client";
 import { prisma } from "../index";
+import { decryptString, encryptString } from "../crypto/fieldCrypto";
 
 export const medsRouter = Router();
 
@@ -26,10 +27,10 @@ const serializeMed = (
 ) => ({
   id: med.id,
   patient_id: med.patient_id,
-  patient_name: med.patient_name,
+  patient_name: decryptString(med.patient_name),
   psychiatrist_id: med.psychiatrist_id,
-  name: med.name,
-  dosage_and_freq: med.dosage_and_freq,
+  name: decryptString(med.name) ?? med.name,
+  dosage_and_freq: decryptString(med.dosage_and_freq) ?? med.dosage_and_freq,
   is_active: med.is_active,
   created_at: med.created_at,
   today_status: todayLog?.status ?? null,
@@ -63,7 +64,7 @@ medsRouter.get("/clinician/:clinicianId/patients", async (req: Request, res: Res
         const g = l.join_group_id ? groupById[l.join_group_id] : undefined;
         return {
           patient_id: l.patient_id,
-          patient_name: l.patient_name ?? "Patient",
+          patient_name: decryptString(l.patient_name) ?? "Patient",
           monitoring_on: l.monitoring_on,
           linked_at: l.created_at,
           group_id: l.join_group_id,
@@ -137,13 +138,14 @@ medsRouter.post("/", async (req: Request, res: Response) => {
       });
     }
 
+    const plainName = (patient_name?.trim() || decryptString(link.patient_name) || "Patient").slice(0, 120);
     const med = await prisma.medication.create({
       data: {
         psychiatrist_id,
         patient_id,
-        patient_name: (patient_name?.trim() || link.patient_name || "Patient").slice(0, 120),
-        name: name.trim().slice(0, 120),
-        dosage_and_freq: dosage_and_freq.trim().slice(0, 200),
+        patient_name: encryptString(plainName),
+        name: encryptString(name.trim().slice(0, 120))!,
+        dosage_and_freq: encryptString(dosage_and_freq.trim().slice(0, 200))!,
         is_active: true,
       },
     });
@@ -167,9 +169,11 @@ medsRouter.patch("/:medId", async (req: Request, res: Response) => {
       where: { id: medId },
       data: {
         ...(typeof is_active === "boolean" ? { is_active } : {}),
-        ...(name?.trim() ? { name: name.trim().slice(0, 120) } : {}),
+        ...(name?.trim()
+          ? { name: encryptString(name.trim().slice(0, 120))! }
+          : {}),
         ...(dosage_and_freq?.trim()
-          ? { dosage_and_freq: dosage_and_freq.trim().slice(0, 200) }
+          ? { dosage_and_freq: encryptString(dosage_and_freq.trim().slice(0, 200))! }
           : {}),
       },
     });

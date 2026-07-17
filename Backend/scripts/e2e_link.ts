@@ -1,7 +1,3 @@
-/**
- * Simulates 2 devices: psychiatrist creates code, patient joins, deactivate.
- * Run: npx tsx scripts/e2e_link.ts
- */
 const BASE = process.env.API_BASE_URL ?? "http://localhost:3000";
 
 async function req(
@@ -91,7 +87,6 @@ async function main() {
   }
   console.log("✓ join blocked after deactivate", blocked.status, blocked.json?.error);
 
-  // Reactivate + new patient
   await req("PATCH", `/api/link/groups/${groupId}`, { is_active: true });
   const joined2 = await req("POST", "/api/link/join", {
     patient_id: patient2,

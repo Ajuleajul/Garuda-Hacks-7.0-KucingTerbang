@@ -27,8 +27,6 @@ model User {
   psychiatrist_notes            SessionNote[]             @relation("PsychiatristSessionNotes")
 }
 
-/// One join code = one care group under a psychiatrist.
-/// psychiatrist_id is the auth user id (Supabase / app user id).
 model JoinGroup {
   id                  String    @id @default(uuid())
   psychiatrist_id     String
@@ -37,7 +35,6 @@ model JoinGroup {
   code                String    @unique
   name                String
   is_active           Boolean   @default(true)
-  /// Null = never expires. Psychiatrist chooses duration when creating.
   expires_at          DateTime?
   created_at          DateTime  @default(now())
 
@@ -46,8 +43,6 @@ model JoinGroup {
   @@index([psychiatrist_id])
 }
 
-/// Patient ↔ psychiatrist binding via a join group.
-/// One patient may only have one care link (one psychiatrist).
 model CareLink {
   id               String     @id @default(uuid())
   patient_id       String     @unique

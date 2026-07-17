@@ -1,19 +1,5 @@
 import { Router, Request, Response } from "express";
 
-/**
- * Curamind Assist — cheapest Gemini setup (Google AI Studio, not Vertex):
- *
- * 1. Open https://aistudio.google.com/apikey -> Create API key
- * 2. Backend/.env:
- *      GEMINI_API_KEY=your_key_here
- *      GEMINI_MODEL=gemini-flash-lite-latest
- * 3. Restart: npm run dev
- *
- * gemini-flash-lite-latest always points at the cheapest Flash-Lite still
- * available (currently 3.1). Older 2.0/2.5 Flash-Lite may 404 for new keys.
- * Without GEMINI_API_KEY, this route uses a local FAQ fallback.
- */
-
 export const chatRouter = Router();
 
 const SYSTEM_INSTRUCTION = `You are Curamind Assist, the in-app help chatbot for Curamind.

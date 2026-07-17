@@ -30,6 +30,21 @@
       "problemMatcher": []
     },
     {
+      "label": "Backend: Docker",
+      "type": "shell",
+      "command": "powershell -ExecutionPolicy Bypass -File scripts/docker-up.ps1",
+      "options": {
+        "cwd": "${workspaceFolder}/Backend"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Curamind: docker + flutter chrome",
+      "dependsOn": ["Backend: Docker", "Flutter: run chrome"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
       "label": "Curamind: backend + flutter chrome",
       "dependsOn": ["Backend: npm run dev", "Flutter: run chrome"],
       "dependsOrder": "sequence",

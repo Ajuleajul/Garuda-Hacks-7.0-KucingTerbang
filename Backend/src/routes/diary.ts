@@ -1,6 +1,12 @@
 import { Router, Request, Response } from "express";
 import { DiaryEntryKind, LinkStatus } from "@prisma/client";
 import { prisma } from "../index";
+import {
+  decryptString,
+  decryptStringList,
+  encryptString,
+  encryptStringList,
+} from "../crypto/fieldCrypto";
 
 export const diaryRouter = Router();
 
@@ -60,14 +66,14 @@ const serializeEntry = (entry: {
   affect_intensity: entry.affect_intensity,
   urge_nssi: entry.urge_nssi,
   urge_substance: entry.urge_substance,
-  emotions: entry.emotions,
-  triggers: entry.triggers,
-  skills: entry.skills,
-  notes: entry.notes,
-  situation: entry.situation,
-  thoughts: entry.thoughts,
-  behavior: entry.behavior,
-  outcome: entry.outcome,
+  emotions: decryptStringList(entry.emotions),
+  triggers: decryptStringList(entry.triggers),
+  skills: decryptStringList(entry.skills),
+  notes: decryptString(entry.notes),
+  situation: decryptString(entry.situation),
+  thoughts: decryptString(entry.thoughts),
+  behavior: decryptString(entry.behavior),
+  outcome: decryptString(entry.outcome),
   created_at: entry.created_at,
 });
 
@@ -80,6 +86,15 @@ diaryRouter.post("/", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "patient_id and valid kind are required." });
   }
 
+  const emotions = pickList(req.body.emotions);
+  const triggers = pickList(req.body.triggers);
+  const skills = pickList(req.body.skills);
+  const notes = pickString(req.body.notes);
+  const situation = pickString(req.body.situation);
+  const thoughts = pickString(req.body.thoughts);
+  const behavior = pickString(req.body.behavior);
+  const outcome = pickString(req.body.outcome);
+
   const payload = {
     patient_id: patientId,
     kind,
@@ -87,21 +102,21 @@ diaryRouter.post("/", async (req: Request, res: Response) => {
     affect_intensity: pickScore(req.body.affect_intensity),
     urge_nssi: pickScore(req.body.urge_nssi),
     urge_substance: pickScore(req.body.urge_substance),
-    emotions: pickList(req.body.emotions),
-    triggers: pickList(req.body.triggers),
-    skills: pickList(req.body.skills),
-    notes: pickString(req.body.notes),
-    situation: pickString(req.body.situation),
-    thoughts: pickString(req.body.thoughts),
-    behavior: pickString(req.body.behavior),
-    outcome: pickString(req.body.outcome),
+    emotions: encryptStringList(emotions),
+    triggers: encryptStringList(triggers),
+    skills: encryptStringList(skills),
+    notes: encryptString(notes),
+    situation: encryptString(situation),
+    thoughts: encryptString(thoughts),
+    behavior: encryptString(behavior),
+    outcome: encryptString(outcome),
   };
 
-  if (kind === DiaryEntryKind.DBT_CARD && payload.notes == null && payload.emotions.length === 0 && payload.triggers.length === 0 && payload.skills.length === 0) {
+  if (kind === DiaryEntryKind.DBT_CARD && notes == null && emotions.length === 0 && triggers.length === 0 && skills.length === 0) {
     return res.status(400).json({ error: "DBT card needs at least one detail." });
   }
 
-  if (kind === DiaryEntryKind.COPING && !payload.situation && !payload.thoughts && !payload.behavior && !payload.outcome) {
+  if (kind === DiaryEntryKind.COPING && !situation && !thoughts && !behavior && !outcome) {
     return res.status(400).json({ error: "Coping entry cannot be empty." });
   }
 

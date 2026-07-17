@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../index";
 import { LinkStatus } from "@prisma/client";
+import { decryptString, encryptString } from "../crypto/fieldCrypto";
 
 export const linkRouter = Router();
 
@@ -10,7 +11,6 @@ const generateCode = () => {
   return `CURA-${chunk()}`;
 };
 
-/** Allowed expiry presets in minutes. null / 0 = never. */
 const ALLOWED_EXPIRY_MINUTES = new Set([15, 60, 1440, 10080]);
 
 const resolveExpiresAt = (expires_in_minutes?: number | null): Date | null => {
@@ -52,11 +52,10 @@ const serializeGroup = (group: {
   member_count: group._count?.care_links ?? group.member_count ?? 0,
   created_at: group.created_at,
   psychiatrist_id: group.psychiatrist_id,
-  psychiatrist_name: group.psychiatrist_name,
-  psychiatrist_email: group.psychiatrist_email,
+  psychiatrist_name: decryptString(group.psychiatrist_name),
+  psychiatrist_email: decryptString(group.psychiatrist_email),
 });
 
-/** Create a join group (1 group = 1 code). Psychiatrist may own many. */
 linkRouter.post("/groups", async (req: Request, res: Response) => {
   const {
     psychiatrist_id,
@@ -96,8 +95,8 @@ linkRouter.post("/groups", async (req: Request, res: Response) => {
     const group = await prisma.joinGroup.create({
       data: {
         psychiatrist_id,
-        psychiatrist_name: psychiatrist_name?.trim() || null,
-        psychiatrist_email: psychiatrist_email?.trim() || null,
+        psychiatrist_name: encryptString(psychiatrist_name?.trim() || null),
+        psychiatrist_email: encryptString(psychiatrist_email?.trim() || null),
         code,
         name: (name?.trim() || "Care group").slice(0, 80),
         is_active: true,
@@ -140,7 +139,7 @@ linkRouter.get("/groups/:psychiatristId", async (req: Request, res: Response) =>
         ...serializeGroup(g),
         members_preview: g.care_links.map((l) => ({
           patient_id: l.patient_id,
-          patient_name: l.patient_name ?? "Patient",
+          patient_name: decryptString(l.patient_name) ?? "Patient",
         })),
       })),
     });
@@ -223,7 +222,10 @@ linkRouter.get("/groups/:groupId/members", async (req: Request, res: Response) =
         return {
           link_id: l.id,
           patient_id: l.patient_id,
-          patient_name: l.patient_name ?? user?.full_name ?? "Patient",
+          patient_name:
+            decryptString(l.patient_name) ??
+            decryptString(user?.full_name) ??
+            "Patient",
           email: user?.email ?? null,
           status: l.status,
           monitoring_on: l.monitoring_on,
@@ -234,8 +236,9 @@ linkRouter.get("/groups/:groupId/members", async (req: Request, res: Response) =
           active_meds_count: patientMeds.length,
           medications: patientMeds.map((m) => ({
             id: m.id,
-            name: m.name,
-            dosage_and_freq: m.dosage_and_freq,
+            name: decryptString(m.name) ?? m.name,
+            dosage_and_freq:
+              decryptString(m.dosage_and_freq) ?? m.dosage_and_freq,
             is_active: m.is_active,
             created_at: m.created_at,
           })),
@@ -433,7 +436,7 @@ linkRouter.post("/join", async (req: Request, res: Response) => {
     const link = await prisma.careLink.create({
       data: {
         patient_id,
-        patient_name: patient_name?.trim() || null,
+        patient_name: encryptString(patient_name?.trim() || null),
         psychiatrist_id: group.psychiatrist_id,
         join_group_id: group.id,
         status: LinkStatus.ACTIVE,
@@ -452,8 +455,8 @@ linkRouter.post("/join", async (req: Request, res: Response) => {
         group_name: group.name,
         psychiatrist: {
           id: group.psychiatrist_id,
-          full_name: group.psychiatrist_name ?? "Clinician",
-          email: group.psychiatrist_email ?? "",
+          full_name: decryptString(group.psychiatrist_name) ?? "Clinician",
+          email: decryptString(group.psychiatrist_email) ?? "",
         },
       },
     });
@@ -474,14 +477,14 @@ linkRouter.get("/patient/:patientId", async (req: Request, res: Response) => {
       ? await prisma.joinGroup.findUnique({ where: { id: link.join_group_id } })
       : null;
 
-    let clinicianName = group?.psychiatrist_name ?? null;
-    let clinicianEmail = group?.psychiatrist_email ?? null;
+    let clinicianName = decryptString(group?.psychiatrist_name ?? null);
+    let clinicianEmail = decryptString(group?.psychiatrist_email ?? null);
     if (!clinicianName) {
       const user = await prisma.user.findUnique({
         where: { id: link.psychiatrist_id },
       });
-      clinicianName = user?.full_name ?? "Clinician";
-      clinicianEmail = user?.email ?? "";
+      clinicianName = decryptString(user?.full_name) ?? user?.full_name ?? "Clinician";
+      clinicianEmail = decryptString(user?.email) ?? user?.email ?? "";
     }
 
     return res.json({
@@ -520,14 +523,14 @@ linkRouter.patch("/patient/:patientId/monitoring", async (req: Request, res: Res
       ? await prisma.joinGroup.findUnique({ where: { id: link.join_group_id } })
       : null;
 
-    let clinicianName = group?.psychiatrist_name ?? null;
-    let clinicianEmail = group?.psychiatrist_email ?? null;
+    let clinicianName = decryptString(group?.psychiatrist_name ?? null);
+    let clinicianEmail = decryptString(group?.psychiatrist_email ?? null);
     if (!clinicianName) {
       const user = await prisma.user.findUnique({
         where: { id: link.psychiatrist_id },
       });
-      clinicianName = user?.full_name ?? "Clinician";
-      clinicianEmail = user?.email ?? "";
+      clinicianName = decryptString(user?.full_name) ?? user?.full_name ?? "Clinician";
+      clinicianEmail = decryptString(user?.email) ?? user?.email ?? "";
     }
 
     return res.json({

@@ -41,7 +41,6 @@ export const startCronJobs = () => {
 
                 if (!todaysMood) {
                     console.log(`[ATTENTION] Patient ${patient.full_name} (${patient.id}) missed their MOOD log today.`);
-                    // wip, implement notification
                 }
 
                 if (!todaysMedication) {

@@ -312,8 +312,6 @@ class CreateGroupResult {
   final bool syncedToServer;
 }
 
-/// Join-code linking. Local-first so same-browser demo always works;
-/// syncs to API when Backend is reachable.
 class LinkService {
   LinkService._();
   static final LinkService instance = LinkService._();

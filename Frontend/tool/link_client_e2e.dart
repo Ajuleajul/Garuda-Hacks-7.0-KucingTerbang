@@ -1,6 +1,3 @@
-// ignore_for_file: avoid_print
-/// Mirrors Flutter LinkService HTTP + JSON parsing (2-device flow).
-/// Run from Frontend/: dart run tool/link_client_e2e.dart
 import 'dart:convert';
 import 'dart:io';
 
@@ -19,7 +16,6 @@ DateTime? parseDate(dynamic value) {
 }
 
 Map<String, dynamic> parseGroup(Map<String, dynamic> json) {
-  // Same fields LinkService.JoinGroup.fromJson needs
   final id = json['id']?.toString() ?? '';
   final code = (json['code']?.toString() ?? '').toUpperCase();
   final psychId = json['psychiatrist_id']?.toString() ?? '';
