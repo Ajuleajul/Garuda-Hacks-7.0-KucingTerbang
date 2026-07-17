@@ -37,7 +37,12 @@ class PatientShell extends StatefulWidget {
 
 class _PatientShellState extends State<PatientShell> {
   late int _index;
-  late final List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex.clamp(0, PatientShell.destinations.length - 1);
+  }
 
   void _go(int i) => setState(() => _index = i);
 
@@ -49,16 +54,15 @@ class _PatientShellState extends State<PatientShell> {
   }
 
   @override
-  void initState() {
-    super.initState();
-    _index = widget.initialIndex.clamp(0, PatientShell.destinations.length - 1);
-    _pages = [
+  Widget build(BuildContext context) {
+    final mobile = curamindUseBottomNav(context);
+    final pages = [
       PatientHomePage(
         displayName: widget.displayName,
         onNavigate: _go,
       ),
       const EMADiaryPage(embedded: true),
-      const MedicationViewPage(embedded: true),
+      MedicationViewPage(embedded: true, active: _index == 2),
       const DistressKitPage(embedded: true),
       const PersonalDashboardPage(embedded: true),
       const ClinicianLinkPage(embedded: true),
@@ -69,11 +73,6 @@ class _PatientShellState extends State<PatientShell> {
         onSignedOut: _signOut,
       ),
     ];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final mobile = curamindUseBottomNav(context);
 
     return Scaffold(
       backgroundColor: CuramindColors.mist,
@@ -85,7 +84,7 @@ class _PatientShellState extends State<PatientShell> {
         showNav: !mobile,
         profileIndex: PatientShell.destinations.length - 1,
       ),
-      body: IndexedStack(index: _index, children: _pages),
+      body: IndexedStack(index: _index, children: pages),
       bottomNavigationBar: mobile
           ? CuramindBottomNav(
               destinations: PatientShell.destinations,

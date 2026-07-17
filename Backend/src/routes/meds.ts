@@ -47,13 +47,24 @@ medsRouter.get("/clinician/:clinicianId/patients", async (req: Request, res: Res
       },
       orderBy: { created_at: "desc" },
     });
+    const groupIds = [...new Set(links.map((l) => l.join_group_id))];
+    const groups = groupIds.length
+      ? await prisma.joinGroup.findMany({ where: { id: { in: groupIds } } })
+      : [];
+    const groupById = Object.fromEntries(groups.map((g) => [g.id, g]));
     return res.json({
-      patients: links.map((l) => ({
-        patient_id: l.patient_id,
-        patient_name: l.patient_name ?? "Patient",
-        monitoring_on: l.monitoring_on,
-        linked_at: l.created_at,
-      })),
+      patients: links.map((l) => {
+        const g = groupById[l.join_group_id];
+        return {
+          patient_id: l.patient_id,
+          patient_name: l.patient_name ?? "Patient",
+          monitoring_on: l.monitoring_on,
+          linked_at: l.created_at,
+          group_id: l.join_group_id,
+          group_code: g?.code ?? null,
+          group_name: g?.name ?? null,
+        };
+      }),
     });
   } catch (error) {
     console.error("List clinician patients error:", error);
@@ -159,6 +170,11 @@ medsRouter.get("/patient/:patientId", async (req: Request, res: Response) => {
   const patientId = String(req.params.patientId ?? "");
   const key = dayKey();
   try {
+    const link = await prisma.careLink.findUnique({
+      where: { patient_id: patientId },
+    });
+    const linked = !!link && link.status === LinkStatus.ACTIVE;
+
     const meds = await prisma.medication.findMany({
       where: { patient_id: patientId, is_active: true },
       orderBy: { created_at: "desc" },
@@ -176,8 +192,21 @@ medsRouter.get("/patient/:patientId", async (req: Request, res: Response) => {
     const logged = taken + missed;
     const adherence_pct = logged === 0 ? 0 : Math.round((taken / logged) * 100);
 
+    let clinician_name: string | null = null;
+    let group_name: string | null = null;
+    if (link) {
+      const group = await prisma.joinGroup.findUnique({
+        where: { id: link.join_group_id },
+      });
+      clinician_name = group?.psychiatrist_name ?? null;
+      group_name = group?.name ?? null;
+    }
+
     return res.json({
       day_key: key,
+      linked,
+      clinician_name,
+      group_name,
       stats: {
         active: meds.length,
         due,

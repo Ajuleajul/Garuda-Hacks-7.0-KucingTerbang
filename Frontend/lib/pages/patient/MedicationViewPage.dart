@@ -9,9 +9,11 @@ class MedicationViewPage extends StatefulWidget {
   const MedicationViewPage({
     super.key,
     this.embedded = false,
+    this.active = true,
   });
 
   final bool embedded;
+  final bool active;
 
   @override
   State<MedicationViewPage> createState() => _MedicationViewPageState();
@@ -20,6 +22,9 @@ class MedicationViewPage extends StatefulWidget {
 class _MedicationViewPageState extends State<MedicationViewPage> {
   bool _loading = true;
   bool _busy = false;
+  bool _linked = false;
+  String? _clinicianName;
+  String? _groupName;
   String? _error;
   List<MedicationModel> _meds = const [];
   MedDayStats _today = const MedDayStats(
@@ -41,7 +46,15 @@ class _MedicationViewPageState extends State<MedicationViewPage> {
   @override
   void initState() {
     super.initState();
-    _load();
+    if (widget.active) _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant MedicationViewPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) {
+      _load();
+    }
   }
 
   Future<void> _load() async {
@@ -56,6 +69,9 @@ class _MedicationViewPageState extends State<MedicationViewPage> {
         _meds = bundle.medications;
         _today = bundle.today;
         _period = bundle.period;
+        _linked = bundle.linked;
+        _clinicianName = bundle.clinicianName;
+        _groupName = bundle.groupName;
         _loading = false;
       });
       try {
@@ -187,7 +203,9 @@ class _MedicationViewPageState extends State<MedicationViewPage> {
                         border: Border.all(color: CuramindColors.mistBlue),
                       ),
                       child: Text(
-                        'No active prescriptions yet. Ask your clinician to prescribe after you join their care group.',
+                        !_linked
+                            ? 'Not linked on the server yet. Open Link, disconnect if needed, then join again while Backend is online so Meds can sync.'
+                            : 'Linked${_clinicianName != null && _clinicianName!.isNotEmpty ? ' with $_clinicianName' : ''}${_groupName != null && _groupName!.isNotEmpty ? ' · $_groupName' : ''}. No active prescriptions yet — ask your clinician to prescribe.',
                         textAlign: TextAlign.center,
                         style: GoogleFonts.outfit(
                           fontSize: 14,

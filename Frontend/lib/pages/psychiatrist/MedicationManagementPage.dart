@@ -9,9 +9,11 @@ class MedicationManagementPage extends StatefulWidget {
   const MedicationManagementPage({
     super.key,
     this.embedded = false,
+    this.active = true,
   });
 
   final bool embedded;
+  final bool active;
 
   @override
   State<MedicationManagementPage> createState() =>
@@ -28,7 +30,15 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
   @override
   void initState() {
     super.initState();
-    _load();
+    if (widget.active) _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant MedicationManagementPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) {
+      _load();
+    }
   }
 
   Future<void> _load() async {
@@ -225,12 +235,35 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
             ),
             const SizedBox(height: 12),
             Text(
-              '${_patients.length} linked patient${_patients.length == 1 ? '' : 's'}',
+              '${_patients.length} linked patient${_patients.length == 1 ? '' : 's'} from care groups',
               style: GoogleFonts.outfit(
                 fontSize: 13,
                 color: CuramindColors.inkMuted,
               ),
             ),
+            if (_patients.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _patients.map((p) {
+                  final group = p.groupCode ?? p.groupName;
+                  return Chip(
+                    label: Text(
+                      group == null || group.isEmpty
+                          ? p.patientName
+                          : '${p.patientName} · $group',
+                    ),
+                    backgroundColor: CuramindColors.mistBlue.withValues(alpha: 0.5),
+                    labelStyle: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: CuramindColors.ink,
+                    ),
+                    side: BorderSide.none,
+                  );
+                }).toList(),
+              ),
+            ],
             const SizedBox(height: 20),
             if (_loading)
               const Padding(
@@ -258,7 +291,7 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
                   padding: const EdgeInsets.all(32),
                   child: Text(
                     _patients.isEmpty
-                        ? 'No linked patients yet. Share a join code first.'
+                        ? 'No linked patients on the server. Create a join code while Backend is online, then have the patient join again (disconnect first if they joined offline).'
                         : 'No active prescriptions. Create one for a linked patient.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.outfit(color: CuramindColors.slate),
@@ -533,7 +566,11 @@ class _PrescriptionFormModalState extends State<_PrescriptionFormModal> {
       ...widget.patients.map(
         (p) => DropdownMenuItem(
           value: p.patientId,
-          child: Text(p.patientName),
+          child: Text(
+            p.groupCode != null && p.groupCode!.isNotEmpty
+                ? '${p.patientName} (${p.groupCode})'
+                : p.patientName,
+          ),
         ),
       ),
       if (widget.initialMed != null &&

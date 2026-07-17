@@ -37,7 +37,13 @@ class ClinicianShell extends StatefulWidget {
 
 class _ClinicianShellState extends State<ClinicianShell> {
   late int _index;
-  late final List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+    _index =
+        widget.initialIndex.clamp(0, ClinicianShell.destinations.length - 1);
+  }
 
   void _go(int i) => setState(() => _index = i);
 
@@ -49,11 +55,9 @@ class _ClinicianShellState extends State<ClinicianShell> {
   }
 
   @override
-  void initState() {
-    super.initState();
-    _index =
-        widget.initialIndex.clamp(0, ClinicianShell.destinations.length - 1);
-    _pages = [
+  Widget build(BuildContext context) {
+    final mobile = curamindUseBottomNav(context);
+    final pages = [
       ClinicianHomePage(
         displayName: widget.displayName,
         onNavigate: _go,
@@ -61,7 +65,7 @@ class _ClinicianShellState extends State<ClinicianShell> {
       const ClinicianJoinCodesPage(embedded: true),
       const PatientMonitoringDashboard(embedded: true),
       const DualBivariateDashboard(embedded: true),
-      const MedicationManagementPage(embedded: true),
+      MedicationManagementPage(embedded: true, active: _index == 4),
       const ExportClinicalReportPage(embedded: true),
       ProfilePage(
         name: widget.displayName,
@@ -70,11 +74,6 @@ class _ClinicianShellState extends State<ClinicianShell> {
         onSignedOut: _signOut,
       ),
     ];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final mobile = curamindUseBottomNav(context);
 
     return Scaffold(
       backgroundColor: CuramindColors.mist,
@@ -86,7 +85,7 @@ class _ClinicianShellState extends State<ClinicianShell> {
         showNav: !mobile,
         profileIndex: ClinicianShell.destinations.length - 1,
       ),
-      body: SizedBox.expand(child: _pages[_index]),
+      body: IndexedStack(index: _index, children: pages),
       bottomNavigationBar: mobile
           ? CuramindBottomNav(
               destinations: ClinicianShell.destinations,

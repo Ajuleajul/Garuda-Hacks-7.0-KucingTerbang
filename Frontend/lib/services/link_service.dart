@@ -258,7 +258,6 @@ class LinkService {
     await _writeStore(store);
   }
 
-  /// Returns true when Backend /health responds.
   Future<bool> pingHealth() async {
     try {
       final res = await http
@@ -270,8 +269,6 @@ class LinkService {
     }
   }
 
-  /// Create on server (required for 2 devices / 2 emulators).
-  /// Falls back to local-only only if [allowOffline] is true.
   Future<CreateGroupResult> createGroup({
     String? name,
     int? expiresInMinutes,
@@ -443,6 +440,8 @@ class LinkService {
           await _saveLocalPatientLink(link);
           return link;
         }
+        await _clearLocalPatientLink(uid);
+        return null;
       }
     } catch (_) {}
 
@@ -453,6 +452,14 @@ class LinkService {
     return PatientCareLink.fromJson(Map<String, dynamic>.from(raw as Map));
   }
 
+  Future<void> _clearLocalPatientLink(String uid) async {
+    final store = await _readStore();
+    final links = Map<String, dynamic>.from(store['links'] as Map? ?? {});
+    links.remove(uid);
+    store['links'] = links;
+    await _writeStore(store);
+  }
+
   Future<PatientCareLink> joinWithCode(String code) async {
     final uid = _uid;
     if (uid == null) throw LinkFailure('Sign in required.');
@@ -460,7 +467,6 @@ class LinkService {
     final upper = code.trim().toUpperCase().replaceAll(RegExp(r'\s+'), '');
     if (upper.length < 4) throw LinkFailure('Enter a valid join code.');
 
-    // API first — required when psych & patient are on different devices/windows.
     try {
       final res = await http
           .post(
@@ -487,77 +493,20 @@ class LinkService {
               'You are already linked to a psychiatrist. Disconnect first.',
         );
       }
-      // 404 etc. — try local before surfacing
-      final apiMsg = body['error'] as String?;
-      try {
-        return await _joinLocal(uid, upper);
-      } on LinkFailure {
-        throw LinkFailure(
-          apiMsg ??
-              'Invalid or inactive join code. '
-                  'Use a code generated while Backend was online '
-                  '(API: ${ApiConfig.baseUrl}).',
-        );
-      }
+      throw LinkFailure(
+        (body['error'] as String?) ??
+            'Invalid or inactive join code. '
+                'Use a code created while Backend is online '
+                '(API: ${ApiConfig.baseUrl}).',
+      );
     } on LinkFailure {
       rethrow;
     } catch (_) {
-      // Network error — same-device local fallback
-      try {
-        return await _joinLocal(uid, upper);
-      } on LinkFailure catch (e) {
-        if (e.message.contains('already linked')) rethrow;
-        throw LinkFailure(
-          'Cannot reach Backend at ${ApiConfig.baseUrl} and code not found locally. '
-          'Start the API (and on a physical phone set API_BASE_URL).',
-        );
-      }
-    }
-  }
-
-  Future<PatientCareLink> _joinLocal(String uid, String upper) async {
-    final store = await _readStore();
-    final links = Map<String, dynamic>.from(store['links'] as Map? ?? {});
-    if (links.containsKey(uid)) {
       throw LinkFailure(
-        'You are already linked to a psychiatrist. Disconnect first.',
+        'Cannot reach Backend at ${ApiConfig.baseUrl}. '
+        'Start the API so Meds can sync with your care group.',
       );
     }
-
-    final groups = (store['groups'] as List? ?? [])
-        .map((e) => JoinGroup.fromJson(Map<String, dynamic>.from(e as Map)))
-        .toList();
-    final gIdx = groups.indexWhere((g) => g.code == upper);
-    if (gIdx < 0) {
-      throw LinkFailure('Invalid or inactive join code.');
-    }
-    if (groups[gIdx].isExpired) {
-      throw LinkFailure(
-        'This join code has expired. Ask your psychiatrist for a new one.',
-      );
-    }
-    if (!groups[gIdx].isActive) {
-      throw LinkFailure('This join code is deactivated.');
-    }
-
-    final group = groups[gIdx];
-    final link = PatientCareLink(
-      id: 'link-${DateTime.now().microsecondsSinceEpoch}',
-      patientId: uid,
-      psychiatristId: group.psychiatristId,
-      groupCode: group.code,
-      groupName: group.name,
-      clinicianName: group.psychiatristName ?? 'Clinician',
-      clinicianEmail: group.psychiatristEmail ?? '',
-      monitoringOn: true,
-      linkedAt: DateTime.now(),
-    );
-    links[uid] = link.toJson();
-    groups[gIdx] = group.copyWith(memberCount: group.memberCount + 1);
-    store['links'] = links;
-    store['groups'] = groups.map((g) => g.toJson()).toList();
-    await _writeStore(store);
-    return link;
   }
 
   Future<void> setMonitoring(bool on) async {

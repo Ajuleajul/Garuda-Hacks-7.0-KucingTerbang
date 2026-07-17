@@ -12,17 +12,23 @@ class LinkedPatient {
     required this.patientId,
     required this.patientName,
     required this.monitoringOn,
+    this.groupCode,
+    this.groupName,
   });
 
   final String patientId;
   final String patientName;
   final bool monitoringOn;
+  final String? groupCode;
+  final String? groupName;
 
   factory LinkedPatient.fromJson(Map<String, dynamic> json) {
     return LinkedPatient(
       patientId: (json['patient_id'] ?? '').toString(),
       patientName: (json['patient_name'] ?? 'Patient').toString(),
       monitoringOn: json['monitoring_on'] == true,
+      groupCode: json['group_code']?.toString(),
+      groupName: json['group_name']?.toString(),
     );
   }
 }
@@ -153,11 +159,17 @@ class PatientMedsBundle {
     required this.medications,
     required this.today,
     required this.period,
+    required this.linked,
+    this.clinicianName,
+    this.groupName,
   });
 
   final List<MedicationModel> medications;
   final MedDayStats today;
   final MedPeriodStats period;
+  final bool linked;
+  final String? clinicianName;
+  final String? groupName;
 }
 
 class MedicationFailure implements Exception {
@@ -257,6 +269,9 @@ class MedicationService {
           adherencePct: (stats['adherence_pct'] as num?)?.toInt() ?? 0,
         ),
         period: period,
+        linked: todayBody['linked'] == true,
+        clinicianName: todayBody['clinician_name']?.toString(),
+        groupName: todayBody['group_name']?.toString(),
       );
     });
   }
