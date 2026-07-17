@@ -225,6 +225,30 @@ class MedicationService {
     });
   }
 
+  Future<MedPeriodStats> loadPatientPeriodStats(
+    String patientId, {
+    int days = 30,
+  }) async {
+    if (_uid == null) throw MedicationFailure('Sign in required.');
+
+    return _guard(() async {
+      final res = await http
+          .get(
+            Uri.parse(
+              '${ApiConfig.baseUrl}/api/meds/patient/$patientId/stats?days=$days',
+            ),
+          )
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode != 200) {
+        final body = _decode(res);
+        throw MedicationFailure(
+          (body['error'] ?? 'Failed to load medication stats.').toString(),
+        );
+      }
+      return MedPeriodStats.fromJson(_decode(res));
+    });
+  }
+
   Future<PatientMedsBundle> loadMyMeds() async {
     final uid = _uid;
     if (uid == null) throw MedicationFailure('Sign in required.');
