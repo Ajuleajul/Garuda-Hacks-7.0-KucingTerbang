@@ -47,14 +47,20 @@ medsRouter.get("/clinician/:clinicianId/patients", async (req: Request, res: Res
       },
       orderBy: { created_at: "desc" },
     });
-    const groupIds = [...new Set(links.map((l) => l.join_group_id))];
+    const groupIds = [
+      ...new Set(
+        links
+          .map((l) => l.join_group_id)
+          .filter((id): id is string => typeof id === "string" && id.length > 0),
+      ),
+    ];
     const groups = groupIds.length
       ? await prisma.joinGroup.findMany({ where: { id: { in: groupIds } } })
       : [];
     const groupById = Object.fromEntries(groups.map((g) => [g.id, g]));
     return res.json({
       patients: links.map((l) => {
-        const g = groupById[l.join_group_id];
+        const g = l.join_group_id ? groupById[l.join_group_id] : undefined;
         return {
           patient_id: l.patient_id,
           patient_name: l.patient_name ?? "Patient",
@@ -195,11 +201,20 @@ medsRouter.get("/patient/:patientId", async (req: Request, res: Response) => {
     let clinician_name: string | null = null;
     let group_name: string | null = null;
     if (link) {
-      const group = await prisma.joinGroup.findUnique({
-        where: { id: link.join_group_id },
-      });
-      clinician_name = group?.psychiatrist_name ?? null;
-      group_name = group?.name ?? null;
+      if (link.join_group_id) {
+        const group = await prisma.joinGroup.findUnique({
+          where: { id: link.join_group_id },
+        });
+        clinician_name = group?.psychiatrist_name ?? null;
+        group_name = group?.name ?? null;
+      }
+      if (!clinician_name) {
+        const user = await prisma.user.findUnique({
+          where: { id: link.psychiatrist_id },
+        });
+        clinician_name = user?.full_name ?? "Clinician";
+      }
+      group_name = group_name ?? "Care group";
     }
 
     return res.json({

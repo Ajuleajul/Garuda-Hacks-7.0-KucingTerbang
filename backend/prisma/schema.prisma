@@ -53,12 +53,12 @@ model CareLink {
   patient_id       String     @unique
   patient_name     String?
   psychiatrist_id  String
-  join_group_id    String
+  join_group_id    String?
   status           LinkStatus @default(ACTIVE)
   monitoring_on    Boolean    @default(true)
   created_at       DateTime   @default(now())
 
-  join_group       JoinGroup  @relation(fields: [join_group_id], references: [id])
+  join_group       JoinGroup? @relation(fields: [join_group_id], references: [id], onDelete: SetNull)
 
   @@index([psychiatrist_id])
 }

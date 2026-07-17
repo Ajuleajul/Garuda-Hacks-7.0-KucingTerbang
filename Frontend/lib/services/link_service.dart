@@ -385,7 +385,6 @@ class LinkService {
     return localMine;
   }
 
-  /// Update local store immediately, then sync API.
   Future<JoinGroup> setGroupActive(String groupId, bool active) async {
     final store = await _readStore();
     final groups = (store['groups'] as List? ?? [])
@@ -420,6 +419,46 @@ class LinkService {
     }
 
     return local;
+  }
+
+  Future<void> deleteGroup(String groupId) async {
+    final uid = _uid;
+    if (uid == null) throw LinkFailure('Sign in required.');
+
+    if (!groupId.startsWith('local-')) {
+      try {
+        final res = await http
+            .delete(
+              Uri.parse(
+                '${ApiConfig.baseUrl}/api/link/groups/$groupId?psychiatrist_id=$uid',
+              ),
+            )
+            .timeout(const Duration(seconds: 8));
+        if (res.statusCode != 200 && res.statusCode != 404) {
+          final body = jsonDecode(res.body) as Map<String, dynamic>;
+          throw LinkFailure(
+            (body['error'] as String?) ?? 'Failed to delete join code.',
+          );
+        }
+      } on LinkFailure {
+        rethrow;
+      } catch (_) {
+        throw LinkFailure(
+          'Cannot reach Backend at ${ApiConfig.baseUrl} to delete join code.',
+        );
+      }
+    }
+
+    final store = await _readStore();
+    final groups = (store['groups'] as List? ?? [])
+        .map((e) => JoinGroup.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    final i = groups.indexWhere((g) => g.id == groupId);
+    if (i >= 0) {
+      groups.removeAt(i);
+      store['groups'] = groups.map((g) => g.toJson()).toList();
+      await _writeStore(store);
+    }
   }
 
   Future<PatientCareLink?> getMyPatientLink() async {

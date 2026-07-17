@@ -154,10 +154,40 @@ linkRouter.patch("/groups/:groupId", async (req: Request, res: Response) => {
   }
 });
 
-/**
- * Patient joins via code.
- * Rules: 1 patient → 1 psychiatrist; code must be active & not expired.
- */
+linkRouter.delete("/groups/:groupId", async (req: Request, res: Response) => {
+  const groupId = String(req.params.groupId ?? "");
+  const psychiatristId =
+    typeof req.query.psychiatrist_id === "string"
+      ? req.query.psychiatrist_id
+      : typeof req.body?.psychiatrist_id === "string"
+        ? req.body.psychiatrist_id
+        : "";
+
+  if (!groupId) {
+    return res.status(400).json({ error: "groupId is required." });
+  }
+
+  try {
+    const group = await prisma.joinGroup.findUnique({ where: { id: groupId } });
+    if (!group) {
+      return res.status(404).json({ error: "Join group not found." });
+    }
+    if (psychiatristId && group.psychiatrist_id !== psychiatristId) {
+      return res.status(403).json({ error: "Not allowed to delete this group." });
+    }
+
+    await prisma.joinGroup.delete({ where: { id: groupId } });
+
+    return res.json({
+      message: "Join code deleted. Existing patient links are unchanged.",
+      id: groupId,
+    });
+  } catch (error) {
+    console.error("Delete group error:", error);
+    return res.status(500).json({ error: "Failed to delete join group." });
+  }
+});
+
 linkRouter.post("/join", async (req: Request, res: Response) => {
   const { patient_id, patient_name, code } = req.body as {
     patient_id?: string;
@@ -232,22 +262,33 @@ linkRouter.get("/patient/:patientId", async (req: Request, res: Response) => {
       where: { patient_id: String(req.params.patientId ?? "") },
     });
     if (!link) return res.json({ link: null });
-    const group = await prisma.joinGroup.findUnique({
-      where: { id: link.join_group_id },
-    });
-    if (!group) return res.json({ link: null });
+
+    const group = link.join_group_id
+      ? await prisma.joinGroup.findUnique({ where: { id: link.join_group_id } })
+      : null;
+
+    let clinicianName = group?.psychiatrist_name ?? null;
+    let clinicianEmail = group?.psychiatrist_email ?? null;
+    if (!clinicianName) {
+      const user = await prisma.user.findUnique({
+        where: { id: link.psychiatrist_id },
+      });
+      clinicianName = user?.full_name ?? "Clinician";
+      clinicianEmail = user?.email ?? "";
+    }
+
     return res.json({
       link: {
         id: link.id,
         status: link.status,
         monitoring_on: link.monitoring_on,
         linked_at: link.created_at,
-        group_code: group.code,
-        group_name: group.name,
+        group_code: group?.code ?? "",
+        group_name: group?.name ?? "Care group",
         psychiatrist: {
           id: link.psychiatrist_id,
-          full_name: group.psychiatrist_name ?? "Clinician",
-          email: group.psychiatrist_email ?? "",
+          full_name: clinicianName,
+          email: clinicianEmail ?? "",
         },
       },
     });
@@ -267,9 +308,9 @@ linkRouter.patch("/patient/:patientId/monitoring", async (req: Request, res: Res
       where: { patient_id: String(req.params.patientId ?? "") },
       data: { monitoring_on },
     });
-    const group = await prisma.joinGroup.findUnique({
-      where: { id: link.join_group_id },
-    });
+    const group = link.join_group_id
+      ? await prisma.joinGroup.findUnique({ where: { id: link.join_group_id } })
+      : null;
     return res.json({
       link: {
         id: link.id,

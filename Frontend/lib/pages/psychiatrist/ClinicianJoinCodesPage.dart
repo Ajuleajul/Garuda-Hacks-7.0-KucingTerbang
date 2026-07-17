@@ -147,6 +147,46 @@ class _ClinicianJoinCodesPageState extends State<ClinicianJoinCodesPage> {
     }
   }
 
+  Future<void> _delete(JoinGroup group) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'Delete join code?',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          '“${group.name}” (${group.code}) will stop accepting new joins. '
+          'Patients already linked stay connected.',
+          style: GoogleFonts.outfit(height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: CuramindColors.danger),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await LinkService.instance.deleteGroup(group.id);
+      if (!mounted) return;
+      setState(() {
+        _groups = _groups.where((g) => g.id != group.id).toList();
+      });
+      _toast('Deleted ${group.code}');
+    } on LinkFailure catch (e) {
+      _toast(e.message, error: true);
+    }
+  }
+
   void _toast(String msg, {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -331,6 +371,7 @@ class _ClinicianJoinCodesPageState extends State<ClinicianJoinCodesPage> {
                           _toast('Copied ${g.code}');
                         },
                         onToggle: () => _toggle(g),
+                        onDelete: () => _delete(g),
                       ),
                     ),
                   ),
@@ -356,11 +397,13 @@ class _GroupCard extends StatelessWidget {
     required this.group,
     required this.onCopy,
     required this.onToggle,
+    required this.onDelete,
   });
 
   final JoinGroup group;
   final VoidCallback onCopy;
   final VoidCallback onToggle;
+  final VoidCallback onDelete;
 
   String get _statusLabel {
     if (group.isExpired) return 'Expired';
@@ -485,20 +528,30 @@ class _GroupCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: onToggle,
-              icon: Icon(
-                group.isActive
-                    ? Icons.pause_circle_outline
-                    : Icons.play_circle_outline,
-                size: 18,
+          Row(
+            children: [
+              TextButton.icon(
+                onPressed: onDelete,
+                style: TextButton.styleFrom(
+                  foregroundColor: CuramindColors.danger,
+                ),
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Delete'),
               ),
-              label: Text(
-                group.isActive ? 'Deactivate code' : 'Reactivate code',
+              const Spacer(),
+              TextButton.icon(
+                onPressed: onToggle,
+                icon: Icon(
+                  group.isActive
+                      ? Icons.pause_circle_outline
+                      : Icons.play_circle_outline,
+                  size: 18,
+                ),
+                label: Text(
+                  group.isActive ? 'Deactivate code' : 'Reactivate code',
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),
