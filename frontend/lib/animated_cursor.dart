@@ -1,6 +1,19 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math' as math;
+
+bool get useCustomCursor {
+  if (kIsWeb) return true;
+  switch (defaultTargetPlatform) {
+    case TargetPlatform.windows:
+    case TargetPlatform.macOS:
+    case TargetPlatform.linux:
+      return true;
+    default:
+      return false;
+  }
+}
 
 class CursorHoverRegion extends StatefulWidget {
   final Widget child;
@@ -25,6 +38,8 @@ class _CursorHoverRegionState extends State<CursorHoverRegion> {
 
   @override
   Widget build(BuildContext context) {
+    if (!useCustomCursor) return widget.child;
+
     return MouseRegion(
       cursor: SystemMouseCursors.none,
       onEnter: (_) {
@@ -114,6 +129,8 @@ class _AnimatedCustomCursorState extends State<AnimatedCustomCursor> {
 
   @override
   Widget build(BuildContext context) {
+    if (!useCustomCursor) return widget.child;
+
     String imagePath = 'assets/images/Select-Cursor--Streamline-Freehand.png';
     bool shouldMirror = false;
 

@@ -3,7 +3,7 @@
     "short_name": "Curamind",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#E8EEF0",
+    "background_color": "#FFFFFF",
     "theme_color": "#3D5A50",
     "description": "Curamind — clinical companion for patients and clinicians.",
     "orientation": "portrait-primary",
