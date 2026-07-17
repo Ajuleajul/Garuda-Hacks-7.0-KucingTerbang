@@ -12,10 +12,12 @@ class PatientHomePage extends StatefulWidget {
     super.key,
     required this.displayName,
     required this.onNavigate,
+    this.active = true,
   });
 
   final String displayName;
   final ValueChanged<int> onNavigate;
+  final bool active;
 
   static const diaryIndex = 1;
   static const medsIndex = 2;
@@ -39,6 +41,19 @@ class _PatientHomePageState extends State<PatientHomePage> {
   bool _clinicianLinked = false;
   String _clinicianName = '';
 
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant PatientHomePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) {
+      _load();
+    }
+  }
   String get _firstName {
     final parts = widget.displayName.trim().split(RegExp(r'\s+'));
     return parts.isEmpty ? 'there' : parts.first;
@@ -59,12 +74,6 @@ class _PatientHomePageState extends State<PatientHomePage> {
     ];
     final n = DateTime.now();
     return '${days[n.weekday - 1]}, ${months[n.month - 1]} ${n.day}';
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
   }
 
   static String _utcDayKey(DateTime d) {

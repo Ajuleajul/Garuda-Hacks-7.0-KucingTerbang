@@ -6,8 +6,13 @@ import '../../theme/curamind_theme.dart';
 import 'PatientMonitoringDashboard.dart';
 
 class MonitorClassesPage extends StatefulWidget {
-  const MonitorClassesPage({super.key, this.embedded = false});
+  const MonitorClassesPage({
+    super.key,
+    this.embedded = false,
+    this.active = true,
+  });
   final bool embedded;
+  final bool active;
 
   @override
   State<MonitorClassesPage> createState() => _MonitorClassesPageState();
@@ -21,7 +26,15 @@ class _MonitorClassesPageState extends State<MonitorClassesPage> {
   @override
   void initState() {
     super.initState();
-    _load();
+    if (widget.active) _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant MonitorClassesPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) {
+      _load();
+    }
   }
 
   Future<void> _load() async {

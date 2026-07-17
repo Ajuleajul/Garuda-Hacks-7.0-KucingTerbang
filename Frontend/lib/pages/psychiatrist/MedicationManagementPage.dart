@@ -109,6 +109,29 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
     return entries;
   }
 
+  List<MapEntry<String, List<LinkedPatient>>> get _patientsByGroup {
+    final map = <String, List<LinkedPatient>>{};
+    for (final p in _patients) {
+      final name = p.groupName?.trim();
+      final key = (name != null && name.isNotEmpty) ? name : 'Ungrouped';
+      map.putIfAbsent(key, () => []).add(p);
+    }
+    for (final list in map.values) {
+      list.sort(
+        (a, b) => a.patientName.toLowerCase().compareTo(
+              b.patientName.toLowerCase(),
+            ),
+      );
+    }
+    final entries = map.entries.toList();
+    entries.sort((a, b) {
+      if (a.key == 'Ungrouped') return 1;
+      if (b.key == 'Ungrouped') return -1;
+      return a.key.toLowerCase().compareTo(b.key.toLowerCase());
+    });
+    return entries;
+  }
+
   Future<void> _deactivate(MedicationModel med) async {
     try {
       await MedicationService.instance.updateMedication(
@@ -283,54 +306,113 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Tap a card to prescribe. Tap again to clear filter.',
+              'Groups stack vertically. Swipe patients sideways. Tap to prescribe.',
               style: GoogleFonts.outfit(
                 fontSize: 12,
                 color: CuramindColors.inkMuted,
               ),
             ),
             if (_patients.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 108,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _patients.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 10),
-                  itemBuilder: (context, i) {
-                    final p = _patients[i];
-                    final selected = _selectedPatientId == p.patientId;
-                    final groupLabel =
-                        (p.groupName?.trim().isNotEmpty == true)
-                            ? p.groupName!.trim()
-                            : 'Care group';
-                    final medCount = _meds
-                        .where((m) => m.isActive && m.patientId == p.patientId)
-                        .length;
-                    return CursorHoverRegion(
-                      child: _PatientTile(
-                        patientName: p.patientName,
-                        groupName: groupLabel,
-                        medCount: medCount,
-                        selected: selected,
-                        onTap: () {
-                          setState(() {
-                            _selectedPatientId =
-                                selected ? null : p.patientId;
-                          });
-                          if (!selected) {
-                            _showPrescriptionModal(
-                              preselectedPatientId: p.patientId,
-                            );
-                          }
-                        },
+              const SizedBox(height: 8),
+              const Divider(height: 24, color: CuramindColors.mistBlue),
+              ..._patientsByGroup.map((entry) {
+                final groupName = entry.key;
+                final patients = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.groups_2_outlined,
+                            size: 18,
+                            color: CuramindColors.ocean,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              groupName,
+                              style: GoogleFonts.outfit(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: CuramindColors.ink,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '${patients.length} patient${patients.length == 1 ? '' : 's'}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              color: CuramindColors.inkMuted,
+                            ),
+                          ),
+                        ],
                       ),
-                    );
-                  },
-                ),
+                      const Divider(
+                        height: 20,
+                        thickness: 1,
+                        color: CuramindColors.mistBlue,
+                      ),
+                      SizedBox(
+                        height: 96,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: patients.length,
+                          separatorBuilder: (_, _) => const SizedBox(width: 10),
+                          itemBuilder: (context, i) {
+                            final p = patients[i];
+                            final selected =
+                                _selectedPatientId == p.patientId;
+                            final medCount = _meds
+                                .where(
+                                  (m) =>
+                                      m.isActive &&
+                                      m.patientId == p.patientId,
+                                )
+                                .length;
+                            return CursorHoverRegion(
+                              child: _PatientTile(
+                                patientName: p.patientName,
+                                medCount: medCount,
+                                selected: selected,
+                                onTap: () {
+                                  setState(() {
+                                    _selectedPatientId =
+                                        selected ? null : p.patientId;
+                                  });
+                                  if (!selected) {
+                                    _showPrescriptionModal(
+                                      preselectedPatientId: p.patientId,
+                                    );
+                                  }
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const Divider(
+                        height: 28,
+                        thickness: 1,
+                        color: CuramindColors.mistBlue,
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ] else
+              const Divider(height: 28, color: CuramindColors.mistBlue),
+            Text(
+              'Active prescriptions',
+              style: GoogleFonts.outfit(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: CuramindColors.ink,
               ),
-            ],
-            const SizedBox(height: 20),
+            ),
+            const SizedBox(height: 12),
             if (_loading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 48),
@@ -357,7 +439,7 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
                   padding: const EdgeInsets.all(32),
                   child: Text(
                     _patients.isEmpty
-                        ? 'No linked patients on the server. Create a join code while Backend is online, then have the patient join again (disconnect first if they joined offline).'
+                        ? 'No linked patients yet. Create a care group invite and have the patient join with that code.'
                         : _selectedPatientId != null
                             ? 'No prescriptions for this patient yet. Use the card above to prescribe.'
                             : 'No active prescriptions. Tap a patient card to prescribe.',
@@ -370,23 +452,81 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
               ..._medsByGroup.map((entry) {
                 final groupName = entry.key;
                 final meds = entry.value;
-                final patientIds = meds.map((m) => m.patientId).toSet();
+                final byPatient = <String, List<MedicationModel>>{};
+                for (final m in meds) {
+                  byPatient.putIfAbsent(m.patientId, () => []).add(m);
+                }
+                final patientBuckets = byPatient.entries.toList()
+                  ..sort((a, b) {
+                    final an = a.value.first.patientName.toLowerCase();
+                    final bn = b.value.first.patientName.toLowerCase();
+                    return an.compareTo(bn);
+                  });
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 20),
                   child: _PrescriptionGroupSection(
                     groupName: groupName,
                     prescriptionCount: meds.length,
-                    patientCount: patientIds.length,
+                    patientCount: patientBuckets.length,
                     children: [
-                      for (var i = 0; i < meds.length; i++) ...[
-                        if (i > 0) const SizedBox(height: 10),
-                        _MedicationCard(
-                          data: meds[i],
-                          onTap: () =>
-                              _showPrescriptionModal(existing: meds[i]),
-                          onDelete: () => _deactivate(meds[i]),
+                      SizedBox(
+                        height: 220,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: patientBuckets.length,
+                          separatorBuilder: (_, _) => Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: VerticalDivider(
+                              width: 1,
+                              thickness: 1,
+                              color: CuramindColors.mistBlue,
+                            ),
+                          ),
+                          itemBuilder: (context, i) {
+                            final bucket = patientBuckets[i];
+                            final patientMeds = bucket.value;
+                            final patientName =
+                                patientMeds.first.patientName;
+                            return SizedBox(
+                              width: 260,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text(
+                                    patientName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: CuramindColors.ocean,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Expanded(
+                                    child: ListView.separated(
+                                      itemCount: patientMeds.length,
+                                      separatorBuilder: (_, _) =>
+                                          const SizedBox(height: 8),
+                                      itemBuilder: (context, j) {
+                                        final med = patientMeds[j];
+                                        return _MedicationCard(
+                                          data: med,
+                                          onTap: () =>
+                                              _showPrescriptionModal(
+                                            existing: med,
+                                          ),
+                                          onDelete: () => _deactivate(med),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
                         ),
-                      ],
+                      ),
                     ],
                   ),
                 );
@@ -408,14 +548,12 @@ class _MedicationManagementPageState extends State<MedicationManagementPage> {
 class _PatientTile extends StatelessWidget {
   const _PatientTile({
     required this.patientName,
-    required this.groupName,
     required this.medCount,
     required this.selected,
     required this.onTap,
   });
 
   final String patientName;
-  final String groupName;
   final int medCount;
   final bool selected;
   final VoidCallback onTap;
@@ -429,7 +567,7 @@ class _PatientTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          width: 168,
+          width: 148,
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
@@ -478,24 +616,12 @@ class _PatientTile extends StatelessWidget {
               const Spacer(),
               Text(
                 patientName,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.outfit(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: selected ? CuramindColors.white : CuramindColors.ink,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                groupName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  color: selected
-                      ? CuramindColors.white.withValues(alpha: 0.85)
-                      : CuramindColors.inkMuted,
                 ),
               ),
             ],
@@ -573,7 +699,7 @@ class _PrescriptionGroupSection extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const Divider(height: 20, color: CuramindColors.mistBlue),
           ...children,
         ],
       ),

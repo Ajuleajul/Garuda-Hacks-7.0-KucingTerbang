@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../config/api_config.dart';
 import '../../services/link_service.dart';
 import '../../theme/curamind_theme.dart';
 
@@ -47,13 +46,31 @@ String _formatExpiry(DateTime at) {
   return '${months[local.month - 1]} ${local.day} · $hh:$mm';
 }
 
-class ClinicianJoinCodesPage extends StatelessWidget {
+class ClinicianJoinCodesPage extends StatefulWidget {
   const ClinicianJoinCodesPage({
     super.key,
     this.embedded = false,
+    this.active = true,
   });
 
   final bool embedded;
+  final bool active;
+
+  @override
+  State<ClinicianJoinCodesPage> createState() => _ClinicianJoinCodesPageState();
+}
+
+class _ClinicianJoinCodesPageState extends State<ClinicianJoinCodesPage> {
+  final GlobalKey<_GroupsListScreenState> _listKey =
+      GlobalKey<_GroupsListScreenState>();
+
+  @override
+  void didUpdateWidget(covariant ClinicianJoinCodesPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) {
+      _listKey.currentState?.refreshFromParent();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,12 +78,16 @@ class ClinicianJoinCodesPage extends StatelessWidget {
       onGenerateRoute: (settings) {
         return MaterialPageRoute<void>(
           settings: settings,
-          builder: (_) => _GroupsListScreen(embedded: embedded),
+          builder: (_) => _GroupsListScreen(
+            key: _listKey,
+            embedded: widget.embedded,
+            active: widget.active,
+          ),
         );
       },
     );
 
-    if (embedded) {
+    if (widget.embedded) {
       return ColoredBox(color: CuramindColors.mist, child: nav);
     }
     return Scaffold(
@@ -77,9 +98,14 @@ class ClinicianJoinCodesPage extends StatelessWidget {
 }
 
 class _GroupsListScreen extends StatefulWidget {
-  const _GroupsListScreen({required this.embedded});
+  const _GroupsListScreen({
+    super.key,
+    required this.embedded,
+    required this.active,
+  });
 
   final bool embedded;
+  final bool active;
 
   @override
   State<_GroupsListScreen> createState() => _GroupsListScreenState();
@@ -88,31 +114,37 @@ class _GroupsListScreen extends StatefulWidget {
 class _GroupsListScreenState extends State<_GroupsListScreen> {
   List<JoinGroup> _groups = [];
   bool _loading = true;
-  bool? _apiOnline;
 
   @override
   void initState() {
     super.initState();
+    if (widget.active) _refresh();
+  }
+
+  @override
+  void didUpdateWidget(covariant _GroupsListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) {
+      _refresh();
+    }
+  }
+
+  void refreshFromParent() {
     _refresh();
   }
 
   Future<void> _refresh() async {
     setState(() => _loading = true);
-    final online = await LinkService.instance.pingHealth();
     try {
       final groups = await LinkService.instance.listMyGroups();
       if (!mounted) return;
       setState(() {
-        _apiOnline = online;
         _groups = groups;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _apiOnline = online;
-        _loading = false;
-      });
+      setState(() => _loading = false);
       _toast(e.toString(), error: true);
     }
   }
@@ -146,7 +178,6 @@ class _GroupsListScreenState extends State<_GroupsListScreen> {
           result.group,
           ..._groups.where((g) => g.id != result.group.id),
         ];
-        _apiOnline = true;
       });
       await Navigator.of(context).push<_GroupHubResult>(
         MaterialPageRoute(
@@ -156,7 +187,6 @@ class _GroupsListScreenState extends State<_GroupsListScreen> {
       await _refresh();
     } on LinkFailure catch (e) {
       _toast(e.message, error: true);
-      setState(() => _apiOnline = false);
     }
   }
 
@@ -302,8 +332,6 @@ class _GroupsListScreenState extends State<_GroupsListScreen> {
                   ),
                   const SizedBox(height: 14),
                 ],
-                _ApiStatusBanner(online: _apiOnline),
-                const SizedBox(height: 14),
                 FilledButton.icon(
                   onPressed: _createGroup,
                   icon: const Icon(Icons.add_rounded),
@@ -511,8 +539,8 @@ class _GroupHubScreenState extends State<_GroupHubScreen> {
     }
   }
 
-  void _openPatient(GroupMember member) {
-    Navigator.of(context).push(
+  void _openPatient(GroupMember member) async {
+    final updated = await Navigator.of(context).push<GroupMember>(
       MaterialPageRoute(
         builder: (_) => _PatientDetailScreen(
           groupName: _group.name,
@@ -520,6 +548,14 @@ class _GroupHubScreenState extends State<_GroupHubScreen> {
         ),
       ),
     );
+    if (updated != null && mounted) {
+      setState(() {
+        _members = [
+          for (final m in _members)
+            if (m.patientId == updated.patientId) updated else m,
+        ];
+      });
+    }
   }
 
   @override
@@ -870,10 +906,10 @@ class _MemberTile extends StatelessWidget {
                           label:
                               '${member.activeMedsCount} med${member.activeMedsCount == 1 ? '' : 's'}',
                         ),
-                        _MiniStat(
-                          label:
-                              '${member.diaryEntries} diary',
-                        ),
+                        if (member.monitoringOn)
+                          _MiniStat(
+                            label: '${member.diaryEntries} diary',
+                          ),
                         _MiniStat(
                           label: member.monitoringOn
                               ? 'Monitoring on'
@@ -920,7 +956,7 @@ class _MiniStat extends StatelessWidget {
   }
 }
 
-class _PatientDetailScreen extends StatelessWidget {
+class _PatientDetailScreen extends StatefulWidget {
   const _PatientDetailScreen({
     required this.groupName,
     required this.member,
@@ -930,8 +966,60 @@ class _PatientDetailScreen extends StatelessWidget {
   final GroupMember member;
 
   @override
+  State<_PatientDetailScreen> createState() => _PatientDetailScreenState();
+}
+
+class _PatientDetailScreenState extends State<_PatientDetailScreen> {
+  late GroupMember _member;
+  bool _toggling = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _member = widget.member;
+  }
+
+  Future<void> _setMonitoring(bool on) async {
+    final previous = _member.monitoringOn;
+    setState(() {
+      _toggling = true;
+      _member = _member.copyWith(monitoringOn: on);
+    });
+    try {
+      await LinkService.instance.setMonitoring(
+        on,
+        patientId: _member.patientId,
+      );
+      if (!mounted) return;
+      setState(() => _toggling = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            on ? 'Monitoring turned on.' : 'Monitoring turned off.',
+          ),
+          backgroundColor: CuramindColors.sageDeep,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _member = _member.copyWith(monitoringOn: previous);
+        _toggling = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: CuramindColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final initial = _initialOf(member.patientName);
+    final initial = _initialOf(_member.patientName);
 
     return Scaffold(
       backgroundColor: CuramindColors.mist,
@@ -946,178 +1034,213 @@ class _PatientDetailScreen extends StatelessWidget {
           ),
         ),
         iconTheme: const IconThemeData(color: CuramindColors.ink),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.of(context).pop(_member),
+        ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: CuramindColors.white.withValues(alpha: 0.95),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: CuramindColors.mistBlue),
-                  ),
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 36,
-                        backgroundColor: CuramindColors.sageSoft,
-                        child: Text(
-                          initial,
-                          style: GoogleFonts.outfit(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w700,
-                            color: CuramindColors.sageDeep,
+      body: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) Navigator.of(context).pop(_member);
+        },
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: CuramindColors.white.withValues(alpha: 0.95),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: CuramindColors.mistBlue),
+                    ),
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          radius: 36,
+                          backgroundColor: CuramindColors.sageSoft,
+                          child: Text(
+                            initial,
+                            style: GoogleFonts.outfit(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w700,
+                              color: CuramindColors.sageDeep,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        member.patientName,
-                        textAlign: TextAlign.center,
+                        const SizedBox(height: 12),
+                        Text(
+                          _member.patientName,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: CuramindColors.ink,
+                          ),
+                        ),
+                        if (_member.email != null &&
+                            _member.email!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            _member.email!,
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              color: CuramindColors.ocean,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        Text(
+                          'In group · ${widget.groupName}',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: CuramindColors.inkMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: CuramindColors.white.withValues(alpha: 0.95),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: CuramindColors.mistBlue),
+                    ),
+                    child: SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        'Remote monitoring',
                         style: GoogleFonts.outfit(
-                          fontSize: 22,
                           fontWeight: FontWeight.w700,
                           color: CuramindColors.ink,
                         ),
                       ),
-                      if (member.email != null &&
-                          member.email!.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          member.email!,
-                          style: GoogleFonts.outfit(
-                            fontSize: 14,
-                            color: CuramindColors.ocean,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      Text(
-                        'In group · $groupName',
+                      subtitle: Text(
+                        _member.monitoringOn
+                            ? 'Diary sharing is on for this patient'
+                            : 'Diary sharing is paused',
                         style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
                           color: CuramindColors.inkMuted,
                         ),
                       ),
+                      value: _member.monitoringOn,
+                      activeThumbColor: CuramindColors.sageDeep,
+                      onChanged: _toggling ? null : _setMonitoring,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _DetailSection(
+                    title: 'Link details',
+                    children: [
+                      _DetailRow(
+                        label: 'Status',
+                        value: _member.status,
+                      ),
+                      _DetailRow(
+                        label: 'Monitoring',
+                        value: _member.monitoringOn ? 'On' : 'Off',
+                      ),
+                      _DetailRow(
+                        label: 'Joined',
+                        value: _formatExpiry(_member.linkedAt),
+                      ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 14),
-                _DetailSection(
-                  title: 'Link details',
-                  children: [
-                    _DetailRow(
-                      label: 'Status',
-                      value: member.status,
-                    ),
-                    _DetailRow(
-                      label: 'Monitoring',
-                      value: member.monitoringOn ? 'On' : 'Off',
-                    ),
-                    _DetailRow(
-                      label: 'Joined',
-                      value: _formatExpiry(member.linkedAt),
-                    ),
-                    _DetailRow(
-                      label: 'Patient ID',
-                      value: member.patientId,
-                      mono: true,
-                    ),
-                    _DetailRow(
-                      label: 'Link ID',
-                      value: member.linkId,
-                      mono: true,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                _DetailSection(
-                  title: 'Activity',
-                  children: [
-                    _DetailRow(
-                      label: 'Diary entries',
-                      value: '${member.diaryEntries}',
-                    ),
-                    _DetailRow(
-                      label: 'Active prescriptions',
-                      value: '${member.activeMedsCount}',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'Prescriptions',
-                  style: GoogleFonts.outfit(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: CuramindColors.ink,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (member.medications.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: CuramindColors.mistBlue.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'No active prescriptions for this patient.',
-                      style: GoogleFonts.outfit(
-                        color: CuramindColors.inkMuted,
-                      ),
-                    ),
-                  )
-                else
-                  ...member.medications.map(
-                    (med) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: CuramindColors.white.withValues(alpha: 0.92),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: CuramindColors.mistBlue),
+                  const SizedBox(height: 14),
+                  _DetailSection(
+                    title: 'Activity',
+                    children: [
+                      if (_member.monitoringOn)
+                        _DetailRow(
+                          label: 'Diary entries',
+                          value: '${_member.diaryEntries}',
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              med.name,
-                              style: GoogleFonts.outfit(
-                                fontWeight: FontWeight.w700,
-                                color: CuramindColors.ink,
+                      _DetailRow(
+                        label: 'Active prescriptions',
+                        value: '${_member.activeMedsCount}',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Prescriptions',
+                    style: GoogleFonts.outfit(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: CuramindColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (_member.medications.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: CuramindColors.mistBlue.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'No active prescriptions for this patient.',
+                        style: GoogleFonts.outfit(
+                          color: CuramindColors.inkMuted,
+                        ),
+                      ),
+                    )
+                  else
+                    ..._member.medications.map(
+                      (med) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: CuramindColors.white.withValues(alpha: 0.92),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: CuramindColors.mistBlue),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                med.name,
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.w700,
+                                  color: CuramindColors.ink,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              med.dosageAndFreq,
-                              style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                color: CuramindColors.slate,
+                              const SizedBox(height: 4),
+                              Text(
+                                med.dosageAndFreq,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  color: CuramindColors.slate,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Prescribed ${_formatExpiry(med.createdAt)}',
-                              style: GoogleFonts.outfit(
-                                fontSize: 11,
-                                color: CuramindColors.inkMuted,
+                              const SizedBox(height: 4),
+                              Text(
+                                'Prescribed ${_formatExpiry(med.createdAt)}',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  color: CuramindColors.inkMuted,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -1164,12 +1287,10 @@ class _DetailRow extends StatelessWidget {
   const _DetailRow({
     required this.label,
     required this.value,
-    this.mono = false,
   });
 
   final String label;
   final String value;
-  final bool mono;
 
   @override
   Widget build(BuildContext context) {
@@ -1189,13 +1310,12 @@ class _DetailRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: SelectableText(
+            child: Text(
               value,
               style: GoogleFonts.outfit(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: CuramindColors.ink,
-                letterSpacing: mono ? 0.2 : 0,
               ),
             ),
           ),
@@ -1548,58 +1668,6 @@ class _GroupListTile extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ApiStatusBanner extends StatelessWidget {
-  const _ApiStatusBanner({required this.online});
-
-  final bool? online;
-
-  @override
-  Widget build(BuildContext context) {
-    if (online == null) {
-      return const SizedBox.shrink();
-    }
-    final ok = online!;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: ok
-            ? CuramindColors.sageSoft.withValues(alpha: 0.7)
-            : CuramindColors.danger.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: ok ? CuramindColors.sage : CuramindColors.danger,
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            ok ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
-            size: 20,
-            color: ok ? CuramindColors.sageDeep : CuramindColors.danger,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              ok
-                  ? 'Backend online · ${ApiConfig.baseUrl}\n'
-                      'Groups and invite codes sync across devices.'
-                  : 'Backend offline · ${ApiConfig.baseUrl}\n'
-                      'Start API in Backend folder. Android emulator uses '
-                      '10.0.2.2; physical phone needs API_BASE_URL=http://192.168.0.5:3000',
-              style: GoogleFonts.outfit(
-                fontSize: 12,
-                height: 1.4,
-                color: CuramindColors.ink,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

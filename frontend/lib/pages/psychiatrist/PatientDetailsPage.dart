@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../theme/curamind_theme.dart';
 import '../../services/diary_service.dart';
+import '../../services/link_service.dart';
 import 'patient_emotion_summary.dart';
 
 class PatientDetailsPage extends StatefulWidget {
@@ -24,8 +25,77 @@ class PatientDetailsPage extends StatefulWidget {
 
 class _PatientDetailsPageState extends State<PatientDetailsPage> {
   int _rangeDays = 14;
+  late bool _monitoringOn;
+  late List<DiaryEntryModel> _entries;
+  bool _toggling = false;
 
-  PatientEmotionSummary get s => widget.summary;
+  @override
+  void initState() {
+    super.initState();
+    _monitoringOn = widget.summary.member.monitoringOn;
+    _entries = List<DiaryEntryModel>.from(widget.summary.entries);
+  }
+
+  PatientEmotionSummary get s => PatientEmotionSummary(
+        member: widget.summary.member.copyWith(monitoringOn: _monitoringOn),
+        entries: _monitoringOn ? _entries : const [],
+      );
+
+  Future<void> _setMonitoring(bool on) async {
+    final previous = _monitoringOn;
+    setState(() {
+      _toggling = true;
+      _monitoringOn = on;
+    });
+    try {
+      await LinkService.instance.setMonitoring(
+        on,
+        patientId: widget.summary.member.patientId,
+      );
+      if (!mounted) return;
+      if (on) {
+        try {
+          final entries =
+              await DiaryService.instance.loadClinicianPatientEntries(
+            widget.summary.member.patientId,
+            limit: 90,
+          );
+          if (!mounted) return;
+          setState(() {
+            _entries = entries;
+            _toggling = false;
+          });
+        } catch (_) {
+          if (!mounted) return;
+          setState(() => _toggling = false);
+        }
+      } else {
+        setState(() => _toggling = false);
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            on ? 'Monitoring turned on.' : 'Monitoring turned off.',
+          ),
+          backgroundColor: CuramindColors.sageDeep,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _monitoringOn = previous;
+        _toggling = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: CuramindColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 
   List<DiaryEntryModel> get _dbtInRange {
     final cutoff = DateTime.now().subtract(Duration(days: _rangeDays));
@@ -188,9 +258,42 @@ class _PatientDetailsPageState extends State<PatientDetailsPage> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    'Remote monitoring',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.w700,
+                      color: CuramindColors.ink,
+                    ),
+                  ),
+                  subtitle: Text(
+                    member.monitoringOn
+                        ? 'Diary sharing is on'
+                        : 'Diary sharing is paused',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: CuramindColors.inkMuted,
+                    ),
+                  ),
+                  value: member.monitoringOn,
+                  activeThumbColor: CuramindColors.sageDeep,
+                  onChanged: _toggling ? null : _setMonitoring,
+                ),
               ],
             ),
           ),
+          if (!member.monitoringOn) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Monitoring is off. Emotion charts and diary logs are hidden until sharing is turned back on.',
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                color: CuramindColors.danger,
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           Wrap(
             spacing: 8,

@@ -11,9 +11,11 @@ class ClinicianLinkPage extends StatefulWidget {
   const ClinicianLinkPage({
     super.key,
     this.embedded = false,
+    this.active = true,
   });
 
   final bool embedded;
+  final bool active;
 
   @override
   State<ClinicianLinkPage> createState() => _ClinicianLinkPageState();
@@ -31,7 +33,15 @@ class _ClinicianLinkPageState extends State<ClinicianLinkPage> {
   @override
   void initState() {
     super.initState();
-    _load();
+    if (widget.active) _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant ClinicianLinkPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) {
+      _load();
+    }
   }
 
   @override
@@ -80,21 +90,59 @@ class _ClinicianLinkPageState extends State<ClinicianLinkPage> {
 
   Future<void> _unlink() async {
     setState(() => _submitting = true);
-    await LinkService.instance.disconnect();
-    if (!mounted) return;
-    setState(() {
-      _submitting = false;
-      _link = null;
-      _status = ClinicianLinkStatus.none;
-    });
-    _toast('Disconnected from clinician.');
+    try {
+      await LinkService.instance.disconnect();
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _link = null;
+        _status = ClinicianLinkStatus.none;
+      });
+      _toast('Disconnected from clinician.');
+    } on LinkFailure catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _toast(e.message, error: true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _toast(e.toString(), error: true);
+    }
   }
 
   Future<void> _toggleMonitoring(bool on) async {
+    final previous = _link?.monitoringOn ?? false;
     setState(() {
+      _submitting = true;
       _link = _link?.copyWith(monitoringOn: on);
     });
-    await LinkService.instance.setMonitoring(on);
+    try {
+      final updated = await LinkService.instance.setMonitoring(on);
+      if (!mounted) return;
+      setState(() {
+        _link = updated;
+        _submitting = false;
+      });
+      _toast(
+        on
+            ? 'Monitoring turned on. Your clinician can view shared data.'
+            : 'Monitoring turned off. Shared diary data is paused.',
+      );
+    } on LinkFailure catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _link = _link?.copyWith(monitoringOn: previous);
+        _submitting = false;
+      });
+      _toast(e.message, error: true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _link = _link?.copyWith(monitoringOn: previous);
+        _submitting = false;
+      });
+      _toast(e.toString(), error: true);
+    }
   }
 
   void _toast(String msg, {bool error = false}) {
@@ -461,7 +509,7 @@ class _LinkedClinicianCard extends StatelessWidget {
               ),
               value: link.monitoringOn,
               activeThumbColor: CuramindColors.sageDeep,
-              onChanged: onToggleMonitoring,
+              onChanged: submitting ? null : onToggleMonitoring,
             ),
           ),
           const SizedBox(height: 10),

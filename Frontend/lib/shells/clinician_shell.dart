@@ -61,12 +61,13 @@ class _ClinicianShellState extends State<ClinicianShell> {
       ClinicianHomePage(
         displayName: widget.displayName,
         onNavigate: _go,
+        active: _index == 0,
       ),
-      const ClinicianJoinCodesPage(embedded: true),
-      const MonitorClassesPage(embedded: true),
-      const DualBivariateDashboard(embedded: true),
+      ClinicianJoinCodesPage(embedded: true, active: _index == 1),
+      MonitorClassesPage(embedded: true, active: _index == 2),
+      DualBivariateDashboard(embedded: true, active: _index == 3),
       MedicationManagementPage(embedded: true, active: _index == 4),
-      const ExportClinicalReportPage(embedded: true),
+      ExportClinicalReportPage(embedded: true, active: _index == 5),
       ProfilePage(
         name: widget.displayName,
         role: 'Psychiatrist',

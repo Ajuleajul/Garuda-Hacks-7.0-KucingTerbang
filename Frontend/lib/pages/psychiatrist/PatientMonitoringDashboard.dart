@@ -44,6 +44,9 @@ class _PatientMonitoringDashboardState
       final members =
           await LinkService.instance.listGroupMembers(widget.group.id);
       final futures = members.map((m) async {
+        if (!m.monitoringOn) {
+          return PatientEmotionSummary(member: m, entries: const []);
+        }
         try {
           final entries =
               await DiaryService.instance.loadClinicianPatientEntries(

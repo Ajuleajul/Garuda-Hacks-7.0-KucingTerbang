@@ -91,10 +91,12 @@ class ClinicalReportService {
     final font = _fontRegular!;
     final fontBold = _fontBold!;
 
-    final diary = await DiaryService.instance.loadClinicianPatientEntries(
-      member.patientId,
-      limit: 200,
-    );
+    final diary = member.monitoringOn
+        ? await DiaryService.instance.loadClinicianPatientEntries(
+            member.patientId,
+            limit: 200,
+          )
+        : const <DiaryEntryModel>[];
     final medStats = await MedicationService.instance.loadPatientPeriodStats(
       member.patientId,
       days: options.days,

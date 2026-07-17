@@ -12,9 +12,11 @@ class DualBivariateDashboard extends StatefulWidget {
   const DualBivariateDashboard({
     super.key,
     this.embedded = false,
+    this.active = true,
   });
 
   final bool embedded;
+  final bool active;
 
   @override
   State<DualBivariateDashboard> createState() => _DualBivariateDashboardState();
@@ -58,7 +60,15 @@ class _DualBivariateDashboardState extends State<DualBivariateDashboard> {
   @override
   void initState() {
     super.initState();
-    _loadGroups();
+    if (widget.active) _loadGroups();
+  }
+
+  @override
+  void didUpdateWidget(covariant DualBivariateDashboard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) {
+      _loadGroups();
+    }
   }
 
   Future<void> _loadGroups() async {
@@ -150,11 +160,14 @@ class _DualBivariateDashboardState extends State<DualBivariateDashboard> {
     });
 
     try {
+      final member = _selectedMember;
       final results = await Future.wait([
-        DiaryService.instance.loadClinicianPatientEntries(
-          patientId,
-          limit: 200,
-        ),
+        (member != null && member.monitoringOn)
+            ? DiaryService.instance.loadClinicianPatientEntries(
+                patientId,
+                limit: 200,
+              )
+            : Future.value(const <DiaryEntryModel>[]),
         MedicationService.instance.loadPatientPeriodStats(
           patientId,
           days: _selectedDays,
@@ -509,6 +522,16 @@ class _DualBivariateDashboardState extends State<DualBivariateDashboard> {
                     color: CuramindColors.inkMuted,
                   ),
                 ),
+                if (!_selectedMember!.monitoringOn) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Monitoring is off for this patient. Mood diary is hidden; adherence still shows.',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: CuramindColors.danger,
+                    ),
+                  ),
+                ],
               ],
               const SizedBox(height: 16),
               if (_error != null)

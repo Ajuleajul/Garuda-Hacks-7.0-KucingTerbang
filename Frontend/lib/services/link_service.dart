@@ -180,6 +180,21 @@ class GroupMember {
           .toList(),
     );
   }
+
+  GroupMember copyWith({bool? monitoringOn}) {
+    return GroupMember(
+      linkId: linkId,
+      patientId: patientId,
+      patientName: patientName,
+      email: email,
+      monitoringOn: monitoringOn ?? this.monitoringOn,
+      status: status,
+      linkedAt: linkedAt,
+      diaryEntries: diaryEntries,
+      activeMedsCount: activeMedsCount,
+      medications: medications,
+    );
+  }
 }
 
 class GroupMemberMed {
@@ -479,20 +494,15 @@ class LinkService {
         final remote = (body['groups'] as List? ?? [])
             .map((e) => JoinGroup.fromJson(Map<String, dynamic>.from(e as Map)))
             .toList();
-        final remoteCodes = remote.map((g) => g.code).toSet();
-        final localOnly = localMine
-            .where((g) => !remoteCodes.contains(g.code))
-            .toList();
         final others =
             existing.where((g) => g.psychiatristId != uid).toList();
-        final merged = [...remote, ...localOnly, ...others];
-        store['groups'] = merged.map((g) => g.toJson()).toList();
+        store['groups'] = [...remote, ...others].map((g) => g.toJson()).toList();
         await _writeStore(store);
-        return [...remote, ...localOnly];
+        return remote;
       }
     } catch (_) {}
 
-    return localMine;
+    return localMine.where((g) => !g.id.startsWith('local-')).toList();
   }
 
   Future<List<GroupMember>> listGroupMembers(String groupId) async {
@@ -819,60 +829,77 @@ class LinkService {
     }
   }
 
-  Future<void> setMonitoring(bool on) async {
-    final uid = _uid;
-    if (uid == null) return;
-
-    final store = await _readStore();
-    final links = Map<String, dynamic>.from(store['links'] as Map? ?? {});
-    final raw = links[uid];
-    if (raw != null) {
-      final link =
-          PatientCareLink.fromJson(Map<String, dynamic>.from(raw as Map));
-      links[uid] = link.copyWith(monitoringOn: on).toJson();
-      store['links'] = links;
-      await _writeStore(store);
-    }
+  Future<PatientCareLink> setMonitoring(bool on, {String? patientId}) async {
+    final targetId = patientId ?? _uid;
+    if (targetId == null) throw LinkFailure('Sign in required.');
 
     try {
-      await http
+      final res = await http
           .patch(
-            Uri.parse('${ApiConfig.baseUrl}/api/link/patient/$uid/monitoring'),
+            Uri.parse(
+              '${ApiConfig.baseUrl}/api/link/patient/$targetId/monitoring',
+            ),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'monitoring_on': on}),
           )
-          .timeout(const Duration(seconds: 6));
-    } catch (_) {}
+          .timeout(const Duration(seconds: 8));
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      if (res.statusCode != 200) {
+        throw LinkFailure(
+          (body['error'] as String?) ?? 'Failed to update monitoring.',
+        );
+      }
+
+      final linkJson = body['link'];
+      if (linkJson is! Map) {
+        throw LinkFailure('Invalid monitoring response from server.');
+      }
+
+      final link = PatientCareLink.fromJson(
+        Map<String, dynamic>.from(linkJson)..['patient_id'] = targetId,
+      );
+
+      if (targetId == _uid) {
+        await _saveLocalPatientLink(link);
+      }
+
+      return link;
+    } on LinkFailure {
+      rethrow;
+    } catch (_) {
+      throw LinkFailure(
+        'Cannot reach Backend at ${ApiConfig.baseUrl}. '
+        'Start the API to update monitoring.',
+      );
+    }
   }
 
   Future<void> disconnect() async {
     final uid = _uid;
     if (uid == null) return;
 
+    var serverOk = false;
+    try {
+      final res = await http
+          .delete(Uri.parse('${ApiConfig.baseUrl}/api/link/patient/$uid'))
+          .timeout(const Duration(seconds: 8));
+      serverOk = res.statusCode == 200 || res.statusCode == 404;
+    } catch (_) {}
+
+    if (!serverOk) {
+      throw LinkFailure(
+        'Cannot disconnect right now. Check Backend and try again.',
+      );
+    }
+
     final store = await _readStore();
     final links = Map<String, dynamic>.from(store['links'] as Map? ?? {});
-    final raw = links.remove(uid);
-    if (raw != null) {
-      final link =
-          PatientCareLink.fromJson(Map<String, dynamic>.from(raw as Map));
-      final groups = (store['groups'] as List? ?? [])
-          .map((e) => JoinGroup.fromJson(Map<String, dynamic>.from(e as Map)))
-          .toList();
-      final i = groups.indexWhere((g) => g.code == link.groupCode);
-      if (i >= 0) {
-        groups[i] = groups[i].copyWith(
-          memberCount: (groups[i].memberCount - 1).clamp(0, 9999),
-        );
-      }
-      store['groups'] = groups.map((g) => g.toJson()).toList();
-    }
+    links.remove(uid);
     store['links'] = links;
     await _writeStore(store);
 
     try {
-      await http
-          .delete(Uri.parse('${ApiConfig.baseUrl}/api/link/patient/$uid'))
-          .timeout(const Duration(seconds: 6));
+      await listMyGroups();
     } catch (_) {}
   }
 }

@@ -5,7 +5,6 @@ import '../../animated_cursor.dart';
 import '../../services/auth_service.dart';
 import '../../theme/curamind_theme.dart';
 
-/// Shown after sign-up when Supabase requires email confirmation.
 class EmailVerificationPage extends StatefulWidget {
   const EmailVerificationPage({
     super.key,

@@ -11,7 +11,6 @@ import '../../theme/curamind_theme.dart';
 import '../auth/ResetPasswordPage.dart';
 import 'AuthPage.dart';
 
-/// Restores the last Supabase session on cold start so users stay signed in.
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
 

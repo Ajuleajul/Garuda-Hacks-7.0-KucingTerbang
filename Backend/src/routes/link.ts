@@ -228,7 +228,9 @@ linkRouter.get("/groups/:groupId/members", async (req: Request, res: Response) =
           status: l.status,
           monitoring_on: l.monitoring_on,
           linked_at: l.created_at,
-          diary_entries: diaryByPatient[l.patient_id] ?? 0,
+          diary_entries: l.monitoring_on
+            ? (diaryByPatient[l.patient_id] ?? 0)
+            : 0,
           active_meds_count: patientMeds.length,
           medications: patientMeds.map((m) => ({
             id: m.id,
@@ -509,20 +511,40 @@ linkRouter.patch("/patient/:patientId/monitoring", async (req: Request, res: Res
     return res.status(400).json({ error: "monitoring_on boolean required" });
   }
   try {
+    const patientId = String(req.params.patientId ?? "");
     const link = await prisma.careLink.update({
-      where: { patient_id: String(req.params.patientId ?? "") },
+      where: { patient_id: patientId },
       data: { monitoring_on },
     });
     const group = link.join_group_id
       ? await prisma.joinGroup.findUnique({ where: { id: link.join_group_id } })
       : null;
+
+    let clinicianName = group?.psychiatrist_name ?? null;
+    let clinicianEmail = group?.psychiatrist_email ?? null;
+    if (!clinicianName) {
+      const user = await prisma.user.findUnique({
+        where: { id: link.psychiatrist_id },
+      });
+      clinicianName = user?.full_name ?? "Clinician";
+      clinicianEmail = user?.email ?? "";
+    }
+
     return res.json({
       link: {
         id: link.id,
+        patient_id: link.patient_id,
         status: link.status,
         monitoring_on: link.monitoring_on,
+        linked_at: link.created_at,
         group_code: group?.code ?? "",
         group_name: group?.name ?? "Care group",
+        psychiatrist_id: link.psychiatrist_id,
+        psychiatrist: {
+          id: link.psychiatrist_id,
+          full_name: clinicianName,
+          email: clinicianEmail ?? "",
+        },
       },
     });
   } catch (error) {

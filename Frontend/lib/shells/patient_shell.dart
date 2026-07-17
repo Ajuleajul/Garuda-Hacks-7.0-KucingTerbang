@@ -60,12 +60,13 @@ class _PatientShellState extends State<PatientShell> {
       PatientHomePage(
         displayName: widget.displayName,
         onNavigate: _go,
+        active: _index == 0,
       ),
       const EMADiaryPage(embedded: true),
       MedicationViewPage(embedded: true, active: _index == 2),
       const DistressKitPage(embedded: true),
       const PersonalDashboardPage(embedded: true),
-      const ClinicianLinkPage(embedded: true),
+      ClinicianLinkPage(embedded: true, active: _index == 5),
       ProfilePage(
         name: widget.displayName,
         role: 'Patient',

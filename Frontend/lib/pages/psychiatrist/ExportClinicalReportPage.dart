@@ -10,9 +10,11 @@ class ExportClinicalReportPage extends StatefulWidget {
   const ExportClinicalReportPage({
     super.key,
     this.embedded = false,
+    this.active = true,
   });
 
   final bool embedded;
+  final bool active;
 
   @override
   State<ExportClinicalReportPage> createState() =>
@@ -57,7 +59,15 @@ class _ExportClinicalReportPageState extends State<ExportClinicalReportPage> {
   @override
   void initState() {
     super.initState();
-    _loadGroups();
+    if (widget.active) _loadGroups();
+  }
+
+  @override
+  void didUpdateWidget(covariant ExportClinicalReportPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) {
+      _loadGroups();
+    }
   }
 
   Future<void> _loadGroups() async {

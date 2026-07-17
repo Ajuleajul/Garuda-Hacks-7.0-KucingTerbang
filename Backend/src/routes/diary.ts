@@ -151,13 +151,20 @@ diaryRouter.get("/clinician/:clinicianId/patient/:patientId", async (req: Reques
       return res.status(403).json({ error: "No active care link for this patient." });
     }
 
+    if (!link.monitoring_on) {
+      return res.json({
+        monitoring_on: false,
+        entries: [],
+      });
+    }
+
     const entries = await prisma.diaryEntry.findMany({
       where: { patient_id: patientId },
       orderBy: { created_at: "desc" },
       take: limit,
     });
     return res.json({
-      monitoring_on: link.monitoring_on,
+      monitoring_on: true,
       entries: entries.map(serializeEntry),
     });
   } catch (error) {

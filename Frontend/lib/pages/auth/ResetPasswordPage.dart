@@ -6,8 +6,6 @@ import '../../services/auth_service.dart';
 import '../../theme/curamind_theme.dart';
 import '../patient/AuthGate.dart';
 
-/// Opened after the user taps the password-reset link
-/// ([AuthChangeEvent.passwordRecovery]).
 class ResetPasswordPage extends StatefulWidget {
   const ResetPasswordPage({super.key});
 
