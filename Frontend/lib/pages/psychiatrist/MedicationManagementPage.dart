@@ -732,9 +732,13 @@ class _MedicationCard extends StatelessWidget {
             children: [
               Container(
                 width: 5,
-                decoration: const BoxDecoration(
-                  color: CuramindColors.sageDeep,
-                  borderRadius: BorderRadius.horizontal(
+                decoration: BoxDecoration(
+                  color: switch (data.todayStatus) {
+                    MedDoseStatus.taken => CuramindColors.sageDeep,
+                    MedDoseStatus.missed => CuramindColors.danger,
+                    MedDoseStatus.due => CuramindColors.ocean,
+                  },
+                  borderRadius: const BorderRadius.horizontal(
                     left: Radius.circular(14),
                   ),
                 ),
@@ -807,6 +811,8 @@ class _MedicationCard extends StatelessWidget {
                           color: CuramindColors.inkMuted,
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      _TodayDoseChip(status: data.todayStatus),
                     ],
                   ),
                 ),
@@ -822,6 +828,63 @@ class _MedicationCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _TodayDoseChip extends StatelessWidget {
+  const _TodayDoseChip({required this.status});
+
+  final MedDoseStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color, bg) = switch (status) {
+      MedDoseStatus.taken => (
+          'Taken today',
+          CuramindColors.sageDeep,
+          CuramindColors.sageSoft.withValues(alpha: 0.7),
+        ),
+      MedDoseStatus.missed => (
+          'Missed today',
+          CuramindColors.danger,
+          CuramindColors.danger.withValues(alpha: 0.12),
+        ),
+      MedDoseStatus.due => (
+          'Not logged yet',
+          CuramindColors.ocean,
+          CuramindColors.mistBlue.withValues(alpha: 0.7),
+        ),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            switch (status) {
+              MedDoseStatus.taken => Icons.check_circle_outline,
+              MedDoseStatus.missed => Icons.error_outline,
+              MedDoseStatus.due => Icons.schedule,
+            },
+            size: 14,
+            color: color,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: GoogleFonts.outfit(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }

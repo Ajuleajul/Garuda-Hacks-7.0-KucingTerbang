@@ -41,6 +41,41 @@ class PatientEmotionSummary {
         .reduce(math.max);
   }
 
+  List<DiaryEntryModel> get todayDbt {
+    final now = DateTime.now();
+    return dbtEntries.where((e) {
+      final d = e.createdAt.toLocal();
+      return d.year == now.year && d.month == now.month && d.day == now.day;
+    }).toList();
+  }
+
+  DiaryEntryModel? get latestTodayDbt {
+    if (todayDbt.isEmpty) return null;
+    final sorted = [...todayDbt]
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return sorted.first;
+  }
+
+  bool get hasTodayDiary => todayDbt.isNotEmpty;
+
+  double? get todayMood {
+    final e = latestTodayDbt;
+    if (e == null) return null;
+    return e.mood.toDouble();
+  }
+
+  double? get todayAffect {
+    final e = latestTodayDbt;
+    if (e == null) return null;
+    return e.affectIntensity.toDouble();
+  }
+
+  int? get todayPeakUrge {
+    final e = latestTodayDbt;
+    if (e == null) return null;
+    return math.max(e.urgeNssi, e.urgeSubstance);
+  }
+
   List<double> get moodSpark {
     final byDay = <String, List<int>>{};
     for (final e in recentDbt) {

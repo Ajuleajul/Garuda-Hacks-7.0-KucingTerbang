@@ -94,13 +94,21 @@ class ClinicalReportService {
     final diary = member.monitoringOn
         ? await DiaryService.instance.loadClinicianPatientEntries(
             member.patientId,
-            limit: 200,
+            limit: 500,
           )
         : const <DiaryEntryModel>[];
-    final medStats = await MedicationService.instance.loadPatientPeriodStats(
-      member.patientId,
-      days: options.days,
-    );
+    final results = await Future.wait([
+      MedicationService.instance.loadPatientPeriodStats(
+        member.patientId,
+        days: options.days,
+      ),
+      MedicationService.instance.loadClinicianMeds(),
+    ]);
+    final medStats = results[0] as MedPeriodStats;
+    final allMeds = results[1] as List<MedicationModel>;
+    final patientMeds = allMeds
+        .where((m) => m.patientId == member.patientId && m.isActive)
+        .toList();
 
     final now = DateTime.now().toUtc();
     final today = DateTime.utc(now.year, now.month, now.day);
@@ -130,10 +138,10 @@ class ClinicalReportService {
       dbt: dbt,
       medStats: medStats,
     );
+    final observedDays = daySeries.where((d) => d.hasObservation).toList();
 
-    final moods = dbt.where((e) => e.mood > 0).map((e) => e.mood).toList();
-    final affects =
-        dbt.where((e) => e.affectIntensity > 0).map((e) => e.affectIntensity);
+    final moods = dbt.map((e) => e.mood).toList();
+    final affects = dbt.map((e) => e.affectIntensity).toList();
     final avgMood = moods.isEmpty
         ? null
         : moods.reduce((a, b) => a + b) / moods.length;
@@ -155,6 +163,8 @@ class ClinicalReportService {
     final reportId =
         'CM-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
     final generatedAt = DateTime.now();
+    final periodStart = cutoff.toLocal();
+    final periodEnd = today.toLocal();
 
     final doc = pw.Document(
       title: 'Curamind Clinical Report - ${member.patientName}',
@@ -174,7 +184,7 @@ class ClinicalReportService {
       pw.MultiPage(
         theme: base,
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 40),
+        margin: const pw.EdgeInsets.fromLTRB(36, 32, 36, 36),
         header: (ctx) => _header(
           reportId: reportId,
           generatedAt: generatedAt,
@@ -183,13 +193,16 @@ class ClinicalReportService {
         build: (ctx) {
           final widgets = <pw.Widget>[
             _confidentialBanner(),
-            pw.SizedBox(height: 14),
+            pw.SizedBox(height: 12),
             _titleBlock(
               patientName: member.patientName,
               groupName: group.name,
               days: options.days,
+              periodStart: periodStart,
+              periodEnd: periodEnd,
+              email: member.email,
             ),
-            pw.SizedBox(height: 16),
+            pw.SizedBox(height: 12),
           ];
 
           if (options.includeDemographics) {
@@ -197,20 +210,37 @@ class ClinicalReportService {
               _sectionTitle('1. Patient identification'),
               _kvTable([
                 ['Full name', member.patientName],
-                ['Email', member.email?.isNotEmpty == true ? member.email! : '-'],
-                ['Patient ID', member.patientId],
+                [
+                  'Email',
+                  member.email?.isNotEmpty == true ? member.email! : '-',
+                ],
                 ['Care group', group.name],
-                ['Group invite code', group.code],
+                ['Invite code', group.code],
                 ['Link status', member.status],
                 [
                   'Monitoring',
                   member.monitoringOn ? 'Enabled' : 'Disabled',
                 ],
-                ['Linked at', _fmtDateTime(member.linkedAt)],
-                ['Report period', 'Last ${options.days} days'],
-                ['Clinician', '$_clinicianName ($_clinicianEmail)'],
+                ['Linked since', _fmtDateTime(member.linkedAt)],
+                [
+                  'Observation window',
+                  '${_fmtDate(periodStart)} to ${_fmtDate(periodEnd)} '
+                      '(${options.days} days)',
+                ],
+                [
+                  'Clinician',
+                  _clinicianEmail.isEmpty
+                      ? _clinicianName
+                      : '$_clinicianName ? $_clinicianEmail',
+                ],
+                [
+                  'Data captured',
+                  '${dbt.length} DBT cards ? ${coping.length} coping ? '
+                      '${patientMeds.length} active Rx ? '
+                      '${observedDays.length} days with observations',
+                ],
               ]),
-              pw.SizedBox(height: 14),
+              pw.SizedBox(height: 12),
             ]);
           }
 
@@ -219,53 +249,56 @@ class ClinicalReportService {
               _sectionTitle('2. Executive clinical summary'),
               pw.Paragraph(
                 text:
-                    'This report aggregates ecological momentary assessment (EMA) diary cards '
-                    'and medication adherence logs for the selected period. Metrics are derived '
-                    'only from recorded observations; missing days are omitted from averages.',
-                style: const pw.TextStyle(fontSize: 9, lineSpacing: 1.3),
+                    'Aggregated EMA diary cards and medication adherence for the selected window. '
+                    'Averages use recorded observations only. Empty calendar days are omitted from averages '
+                    'and from the observation table below.',
+                style: const pw.TextStyle(fontSize: 9, lineSpacing: 1.35),
               ),
               pw.SizedBox(height: 8),
-              _metricGrid([
-                _Metric(
-                  'Avg mood',
-                  avgMood == null ? '-' : avgMood.toStringAsFixed(1),
-                  '/10',
-                ),
-                _Metric(
-                  'Avg affect',
-                  avgAffect == null ? '-' : avgAffect.toStringAsFixed(1),
-                  '/10',
-                ),
-                _Metric(
-                  'Peak urge',
-                  peakUrge?.toString() ?? '-',
-                  '/10',
-                ),
-                _Metric(
-                  'Adherence',
-                  medStats.logged == 0
-                      ? '-'
-                      : '${medStats.adherencePct}%',
-                  'period',
-                ),
-                _Metric('DBT cards', '${dbt.length}', 'in range'),
-                _Metric('Coping logs', '${coping.length}', 'in range'),
-                _Metric('Active Rx', '${medStats.activeMeds}', 'meds'),
-                _Metric('High-urge days', '$highUrgeDays', 'urge >= 7'),
-                _Metric('Low-mood days', '$lowMoodDays', 'mood <= 3.5'),
+              _metricTable([
+                [
+                  _Metric(
+                    'Avg mood',
+                    avgMood == null ? '-' : avgMood.toStringAsFixed(1),
+                    '/10',
+                  ),
+                  _Metric(
+                    'Avg affect',
+                    avgAffect == null ? '-' : avgAffect.toStringAsFixed(1),
+                    '/10',
+                  ),
+                  _Metric('Peak urge', peakUrge?.toString() ?? '-', '/10'),
+                ],
+                [
+                  _Metric(
+                    'Adherence',
+                    medStats.logged == 0 ? '-' : '${medStats.adherencePct}%',
+                    'logged doses',
+                  ),
+                  _Metric('DBT cards', '${dbt.length}', 'in window'),
+                  _Metric('Coping logs', '${coping.length}', 'in window'),
+                ],
+                [
+                  _Metric('Active Rx', '${patientMeds.length}', 'medications'),
+                  _Metric('High-urge days', '$highUrgeDays', 'urge >= 7'),
+                  _Metric('Low-mood days', '$lowMoodDays', 'mood <= 3.5'),
+                ],
               ]),
-              if ((peakUrge ?? 0) >= 7 || lowMoodDays > 0 || !member.monitoringOn)
+              if ((peakUrge ?? 0) >= 7 ||
+                  lowMoodDays > 0 ||
+                  !member.monitoringOn)
                 pw.Container(
                   margin: const pw.EdgeInsets.only(top: 8),
                   padding: const pw.EdgeInsets.all(8),
                   decoration: pw.BoxDecoration(
                     color: PdfColor.fromInt(0xFFFFEBEE),
-                    border: pw.Border.all(color: PdfColor.fromInt(0xFFC62828)),
+                    border:
+                        pw.Border.all(color: PdfColor.fromInt(0xFFC62828)),
                   ),
                   child: pw.Text(
                     [
                       if (!member.monitoringOn)
-                        'Monitoring is currently disabled by the patient link setting.',
+                        'Monitoring is currently disabled ? diary content may be incomplete.',
                       if ((peakUrge ?? 0) >= 7)
                         'Elevated urge intensity detected (peak $peakUrge/10).',
                       if (lowMoodDays > 0)
@@ -278,206 +311,193 @@ class ClinicalReportService {
                     ),
                   ),
                 ),
-              pw.SizedBox(height: 14),
+              pw.SizedBox(height: 12),
             ]);
           }
 
-          if (options.includeMoodAffect) {
-            widgets.addAll([
-              _sectionTitle('3. Mood & affect trajectory'),
+          if (options.includeMoodAffect ||
+              options.includeUrgeRisk ||
+              options.includeAdherenceChart) {
+            widgets.add(_sectionTitle('3. Daily observation log'));
+            widgets.add(
               pw.Text(
-                'Daily mean mood (0-10) from DBT diary cards.',
-                style: const pw.TextStyle(fontSize: 9),
+                'One row per calendar day that has diary and/or medication activity.',
+                style: const pw.TextStyle(fontSize: 8),
               ),
-              pw.SizedBox(height: 8),
-              _lineChart(
-                daySeries
-                    .where((d) => d.mood != null)
-                    .map((d) => d.mood! * 10)
-                    .toList(),
-                label: 'Mood x10 (aligned to 0-100 scale)',
-                color: PdfColor.fromInt(0xFF1F6F8B),
+            );
+            widgets.add(pw.SizedBox(height: 6));
+            widgets.add(
+              _combinedDayTable(
+                observedDays,
+                includeMood: options.includeMoodAffect,
+                includeAffect: options.includeMoodAffect,
+                includeUrge: options.includeUrgeRisk,
+                includeAdherence: options.includeAdherenceChart,
               ),
-              pw.SizedBox(height: 8),
-              _dayMetricTable(
-                daySeries,
-                includeMood: true,
-                includeAffect: true,
-                includeUrge: false,
-                includeAdherence: false,
-              ),
-              pw.SizedBox(height: 14),
-            ]);
-          }
-
-          if (options.includeUrgeRisk) {
-            widgets.addAll([
-              _sectionTitle('4. Urge & risk monitoring'),
-              pw.Text(
-                'Peak daily urge = max(NSSI urge, substance urge) on DBT cards.',
-                style: const pw.TextStyle(fontSize: 9),
-              ),
-              pw.SizedBox(height: 8),
-              _lineChart(
-                daySeries
-                    .where((d) => d.urge != null)
-                    .map((d) => d.urge! * 10)
-                    .toList(),
-                label: 'Peak urge x10',
-                color: PdfColor.fromInt(0xFFC62828),
-              ),
-              pw.SizedBox(height: 8),
-              _dayMetricTable(
-                daySeries,
-                includeMood: false,
-                includeAffect: false,
-                includeUrge: true,
-                includeAdherence: false,
-              ),
-              pw.SizedBox(height: 14),
-            ]);
+            );
+            widgets.add(pw.SizedBox(height: 10));
+            if (options.includeMoodAffect) {
+              widgets.add(
+                _seriesChart(
+                  title: 'Mood trajectory (0-10)',
+                  days: observedDays.where((d) => d.mood != null).toList(),
+                  valueOf: (d) => d.mood!,
+                  color: PdfColor.fromInt(0xFF1F6F8B),
+                  maxY: 10,
+                ),
+              );
+              widgets.add(pw.SizedBox(height: 8));
+              widgets.add(
+                _seriesChart(
+                  title: 'Affect intensity (0-10)',
+                  days: observedDays.where((d) => d.affect != null).toList(),
+                  valueOf: (d) => d.affect!,
+                  color: PdfColor.fromInt(0xFF455A64),
+                  maxY: 10,
+                ),
+              );
+              widgets.add(pw.SizedBox(height: 8));
+            }
+            if (options.includeUrgeRisk) {
+              widgets.add(
+                _seriesChart(
+                  title: 'Peak urge (max NSSI / substance, 0-10)',
+                  days: observedDays.where((d) => d.urge != null).toList(),
+                  valueOf: (d) => d.urge!,
+                  color: PdfColor.fromInt(0xFFC62828),
+                  maxY: 10,
+                ),
+              );
+              widgets.add(pw.SizedBox(height: 8));
+            }
+            if (options.includeAdherenceChart) {
+              widgets.add(
+                _seriesChart(
+                  title: 'Daily adherence % (taken / active Rx)',
+                  days: observedDays
+                      .where((d) => d.adherencePct != null)
+                      .toList(),
+                  valueOf: (d) => d.adherencePct!,
+                  color: PdfColor.fromInt(0xFF2F5D50),
+                  maxY: 100,
+                ),
+              );
+            }
+            widgets.add(pw.SizedBox(height: 12));
           }
 
           if (options.includeEmotionTags) {
             widgets.addAll([
-              _sectionTitle('5. Emotions, triggers & skills'),
+              _sectionTitle('4. Emotions, triggers & skills'),
               _tagBlock('Frequent emotions', emotions),
               pw.SizedBox(height: 6),
               _tagBlock('Frequent triggers', triggers),
               pw.SizedBox(height: 6),
               _tagBlock('Skills reported', skills),
-              pw.SizedBox(height: 14),
+              pw.SizedBox(height: 12),
             ]);
           }
 
-          if (options.includeMedications || options.includeAdherenceChart) {
-            widgets.add(_sectionTitle('6. Medication profile & adherence'));
-            if (options.includeMedications) {
-              widgets.add(pw.SizedBox(height: 6));
-              if (member.medications.isEmpty) {
-                widgets.add(
-                  pw.Text(
-                    'No active prescriptions on file for this patient.',
-                    style: const pw.TextStyle(fontSize: 9),
-                  ),
-                );
-              } else {
-                widgets.add(
-                  pw.TableHelper.fromTextArray(
-                    headers: const ['Medication', 'Dosage / frequency', 'Since'],
-                    data: member.medications
-                        .map(
-                          (m) => [
-                            m.name,
-                            m.dosageAndFreq,
-                            _fmtDate(m.createdAt),
-                          ],
-                        )
-                        .toList(),
-                    headerStyle: pw.TextStyle(
-                      fontWeight: pw.FontWeight.bold,
-                      fontSize: 9,
-                      color: PdfColors.white,
-                    ),
-                    headerDecoration: const pw.BoxDecoration(
-                      color: PdfColor.fromInt(0xFF2F5D50),
-                    ),
-                    cellStyle: const pw.TextStyle(fontSize: 8),
-                    cellAlignments: {
-                      0: pw.Alignment.centerLeft,
-                      1: pw.Alignment.centerLeft,
-                      2: pw.Alignment.centerLeft,
-                    },
-                    border: pw.TableBorder.all(
-                      color: PdfColor.fromInt(0xFFCFD8DC),
-                      width: 0.4,
-                    ),
-                  ),
-                );
-              }
-              widgets.add(pw.SizedBox(height: 8));
-              widgets.add(
-                _kvTable([
-                  ['Active medications', '${medStats.activeMeds}'],
-                  ['Doses taken (period)', '${medStats.taken}'],
-                  ['Doses missed (period)', '${medStats.missed}'],
-                  [
-                    'Logged adherence',
-                    medStats.logged == 0
-                        ? '?'
-                        : '${medStats.adherencePct}% of logged doses',
-                  ],
-                ]),
-              );
-            }
-            if (options.includeAdherenceChart) {
-              widgets.add(pw.SizedBox(height: 8));
+          if (options.includeMedications) {
+            widgets.add(_sectionTitle('5. Medication profile & today status'));
+            widgets.add(pw.SizedBox(height: 6));
+            if (patientMeds.isEmpty) {
               widgets.add(
                 pw.Text(
-                  'Daily adherence % = taken / active prescriptions (or taken / logged if no active Rx count).',
-                  style: const pw.TextStyle(fontSize: 8),
+                  'No active prescriptions on file for this patient.',
+                  style: const pw.TextStyle(fontSize: 9),
                 ),
               );
-              widgets.add(pw.SizedBox(height: 6));
+            } else {
               widgets.add(
-                _lineChart(
-                  daySeries
-                      .where((d) => d.adherencePct != null)
-                      .map((d) => d.adherencePct!)
+                pw.TableHelper.fromTextArray(
+                  headers: const [
+                    'Medication',
+                    'Dosage / frequency',
+                    'Prescribed',
+                    'Today',
+                  ],
+                  data: patientMeds
+                      .map(
+                        (m) => [
+                          m.name,
+                          m.dosageAndFreq,
+                          _fmtDate(m.createdAt),
+                          switch (m.todayStatus) {
+                            MedDoseStatus.taken => 'Taken',
+                            MedDoseStatus.missed => 'Missed',
+                            MedDoseStatus.due => 'Not logged',
+                          },
+                        ],
+                      )
                       .toList(),
-                  label: 'Adherence %',
-                  color: PdfColor.fromInt(0xFF2F5D50),
-                ),
-              );
-              widgets.add(pw.SizedBox(height: 8));
-              widgets.add(
-                _dayMetricTable(
-                  daySeries,
-                  includeMood: false,
-                  includeAffect: false,
-                  includeUrge: false,
-                  includeAdherence: true,
+                  headerStyle: pw.TextStyle(
+                    fontWeight: pw.FontWeight.bold,
+                    fontSize: 8,
+                    color: PdfColors.white,
+                  ),
+                  headerDecoration: const pw.BoxDecoration(
+                    color: PdfColor.fromInt(0xFF2F5D50),
+                  ),
+                  cellStyle: const pw.TextStyle(fontSize: 8),
+                  cellAlignments: {
+                    0: pw.Alignment.centerLeft,
+                    1: pw.Alignment.centerLeft,
+                    2: pw.Alignment.centerLeft,
+                    3: pw.Alignment.center,
+                  },
+                  border: pw.TableBorder.all(
+                    color: PdfColor.fromInt(0xFFCFD8DC),
+                    width: 0.4,
+                  ),
                 ),
               );
             }
-            widgets.add(pw.SizedBox(height: 14));
+            widgets.add(pw.SizedBox(height: 8));
+            widgets.add(
+              _kvTable([
+                ['Active medications', '${patientMeds.length}'],
+                ['Doses taken (period)', '${medStats.taken}'],
+                ['Doses missed (period)', '${medStats.missed}'],
+                [
+                  'Logged adherence',
+                  medStats.logged == 0
+                      ? 'No doses logged in window'
+                      : '${medStats.adherencePct}% of logged doses '
+                          '(${medStats.taken} taken / ${medStats.logged} logged)',
+                ],
+              ]),
+            );
+            widgets.add(pw.SizedBox(height: 12));
           }
 
           if (options.includeDiaryLog) {
             widgets.addAll([
-              _sectionTitle('7. DBT diary card log'),
+              _sectionTitle('6. Full DBT diary card log'),
               if (dbt.isEmpty)
                 pw.Text(
-                  'No DBT diary cards in this period.',
+                  member.monitoringOn
+                      ? 'No DBT diary cards in this period.'
+                      : 'Monitoring is off ? diary entries are not available.',
                   style: const pw.TextStyle(fontSize: 9),
                 )
               else
-                ...dbt.reversed.take(40).map(_dbtEntryBlock),
-              if (dbt.length > 40)
-                pw.Text(
-                  'Showing latest 40 of ${dbt.length} DBT cards.',
-                  style: const pw.TextStyle(fontSize: 8),
-                ),
-              pw.SizedBox(height: 14),
+                ...dbt.reversed.map(_dbtEntryBlock),
+              pw.SizedBox(height: 12),
             ]);
           }
 
           if (options.includeCopingLog) {
             widgets.addAll([
-              _sectionTitle('8. Coping / CBT log'),
+              _sectionTitle('7. Coping / CBT log'),
               if (coping.isEmpty)
                 pw.Text(
                   'No coping entries in this period.',
                   style: const pw.TextStyle(fontSize: 9),
                 )
               else
-                ...coping.take(25).map(_copingEntryBlock),
-              if (coping.length > 25)
-                pw.Text(
-                  'Showing latest 25 of ${coping.length} coping entries.',
-                  style: const pw.TextStyle(fontSize: 8),
-                ),
-              pw.SizedBox(height: 14),
+                ...coping.map(_copingEntryBlock),
+              pw.SizedBox(height: 12),
             ]);
           }
 
@@ -518,12 +538,10 @@ class ClinicalReportService {
     final urgeByDay = <String, List<double>>{};
     for (final e in dbt) {
       final key = _dayKey(e.createdAt);
-      if (e.mood > 0) moodByDay.putIfAbsent(key, () => []).add(e.mood.toDouble());
-      if (e.affectIntensity > 0) {
-        affectByDay
-            .putIfAbsent(key, () => [])
-            .add(e.affectIntensity.toDouble());
-      }
+      moodByDay.putIfAbsent(key, () => []).add(e.mood.toDouble());
+      affectByDay
+          .putIfAbsent(key, () => [])
+          .add(e.affectIntensity.toDouble());
       urgeByDay
           .putIfAbsent(key, () => [])
           .add(math.max(e.urgeNssi, e.urgeSubstance).toDouble());
@@ -542,14 +560,16 @@ class ClinicalReportService {
       final missed = med?.missed ?? 0;
       final logged = taken + missed;
       double? adh;
-      if (active > 0) {
-        adh = (taken / active) * 100;
-      } else if (logged > 0) {
-        adh = (taken / logged) * 100;
+      if (logged > 0) {
+        if (active > 0) {
+          adh = (taken / active) * 100;
+        } else {
+          adh = (taken / logged) * 100;
+        }
       }
       return _DayRow(
         key: key,
-        label: '${day.month}/${day.day}',
+        label: '${day.toLocal().month}/${day.toLocal().day}',
         mood: (moods == null || moods.isEmpty)
             ? null
             : moods.reduce((a, b) => a + b) / moods.length,
@@ -697,6 +717,9 @@ class ClinicalReportService {
     required String patientName,
     required String groupName,
     required int days,
+    required DateTime periodStart,
+    required DateTime periodEnd,
+    String? email,
   }) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -705,9 +728,26 @@ class ClinicalReportService {
           patientName,
           style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
         ),
-        pw.SizedBox(height: 2),
+        if (email != null && email.isNotEmpty) ...[
+          pw.SizedBox(height: 2),
+          pw.Text(
+            email,
+            style: pw.TextStyle(
+              fontSize: 10,
+              color: PdfColor.fromInt(0xFF1F6F8B),
+            ),
+          ),
+        ],
+        pw.SizedBox(height: 4),
         pw.Text(
-          'Care group: $groupName | Observation window: last $days days',
+          'Care group: $groupName',
+          style: pw.TextStyle(
+            fontSize: 10,
+            color: PdfColor.fromInt(0xFF455A64),
+          ),
+        ),
+        pw.Text(
+          'Observation window: ${_fmtDate(periodStart)} ? ${_fmtDate(periodEnd)} ($days days)',
           style: pw.TextStyle(
             fontSize: 10,
             color: PdfColor.fromInt(0xFF455A64),
@@ -777,135 +817,85 @@ class ClinicalReportService {
     );
   }
 
-  pw.Widget _metricGrid(List<_Metric> metrics) {
-    return pw.Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: metrics
+  pw.Widget _metricTable(List<List<_Metric>> rows) {
+    return pw.Table(
+      border: pw.TableBorder.all(
+        color: PdfColor.fromInt(0xFFCFD8DC),
+        width: 0.45,
+      ),
+      children: rows
           .map(
-            (m) => pw.Container(
-              width: 110,
-              padding: const pw.EdgeInsets.all(7),
-              decoration: pw.BoxDecoration(
-                border: pw.Border.all(
-                  color: PdfColor.fromInt(0xFFCFD8DC),
-                  width: 0.5,
-                ),
-                color: PdfColor.fromInt(0xFFF7FAF9),
-              ),
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    m.label,
-                    style: pw.TextStyle(
-                      fontSize: 7,
-                      color: PdfColor.fromInt(0xFF607D8B),
+            (row) => pw.TableRow(
+              children: row
+                  .map(
+                    (m) => pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            m.label,
+                            style: pw.TextStyle(
+                              fontSize: 7.5,
+                              color: PdfColor.fromInt(0xFF607D8B),
+                            ),
+                          ),
+                          pw.SizedBox(height: 2),
+                          pw.RichText(
+                            text: pw.TextSpan(
+                              children: [
+                                pw.TextSpan(
+                                  text: m.value,
+                                  style: pw.TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: pw.FontWeight.bold,
+                                    color: PdfColor.fromInt(0xFF263238),
+                                  ),
+                                ),
+                                pw.TextSpan(
+                                  text: ' ${m.hint}',
+                                  style: pw.TextStyle(
+                                    fontSize: 8,
+                                    color: PdfColor.fromInt(0xFF78909C),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  pw.SizedBox(height: 2),
-                  pw.Text(
-                    m.value,
-                    style: pw.TextStyle(
-                      fontSize: 12,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                  pw.Text(m.hint, style: const pw.TextStyle(fontSize: 7)),
-                ],
-              ),
+                  )
+                  .toList(),
             ),
           )
           .toList(),
     );
   }
 
-  pw.Widget _lineChart(
-    List<double> values, {
-    required String label,
-    required PdfColor color,
-  }) {
-    if (values.length < 2) {
-      return pw.Container(
-        height: 70,
-        alignment: pw.Alignment.center,
-        child: pw.Text(
-          'Insufficient points to render chart.',
-          style: const pw.TextStyle(fontSize: 8),
-        ),
-      );
-    }
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-      children: [
-        pw.Text(label, style: const pw.TextStyle(fontSize: 8)),
-        pw.SizedBox(height: 4),
-        pw.SizedBox(
-          height: 90,
-          child: pw.CustomPaint(
-            size: const PdfPoint(500, 90),
-            painter: (PdfGraphics canvas, PdfPoint size) {
-              canvas
-                ..setStrokeColor(PdfColor.fromInt(0xFFECEFF1))
-                ..setLineWidth(0.5);
-              for (var g = 0; g <= 4; g++) {
-                final y = size.y * g / 4;
-                canvas.drawLine(0, y, size.x, y);
-              }
-              const minV = 0.0;
-              const maxV = 100.0;
-              canvas
-                ..setStrokeColor(color)
-                ..setLineWidth(1.6);
-              for (var i = 0; i < values.length; i++) {
-                final x = i / (values.length - 1) * size.x;
-                final y =
-                    size.y - ((values[i] - minV) / (maxV - minV)) * size.y;
-                if (i == 0) {
-                  canvas.moveTo(x, y);
-                } else {
-                  canvas.lineTo(x, y);
-                }
-              }
-              canvas.strokePath();
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  pw.Widget _dayMetricTable(
+  pw.Widget _combinedDayTable(
     List<_DayRow> rows, {
     required bool includeMood,
     required bool includeAffect,
     required bool includeUrge,
     required bool includeAdherence,
   }) {
-    final headers = <String>['Date'];
-    if (includeMood) headers.add('Mood');
-    if (includeAffect) headers.add('Affect');
-    if (includeUrge) headers.add('Peak urge');
-    if (includeAdherence) headers.addAll(['Adh %', 'Taken', 'Missed']);
-
-    final dataRows = rows.where((r) {
-      if (includeMood && r.mood != null) return true;
-      if (includeAffect && r.affect != null) return true;
-      if (includeUrge && r.urge != null) return true;
-      if (includeAdherence && r.adherencePct != null) return true;
-      return false;
-    }).toList();
-
-    if (dataRows.isEmpty) {
+    if (rows.isEmpty) {
       return pw.Text(
-        'No observations in this section for the selected window.',
+        'No diary or medication observations in this window.',
         style: const pw.TextStyle(fontSize: 8),
       );
     }
 
+    final headers = <String>['Date'];
+    if (includeMood) headers.add('Mood');
+    if (includeAffect) headers.add('Affect');
+    if (includeUrge) headers.add('Urge');
+    if (includeAdherence) headers.addAll(['Adh %', 'Taken', 'Missed']);
+
     return pw.TableHelper.fromTextArray(
       headers: headers,
-      data: dataRows.map((r) {
+      data: rows.map((r) {
         final row = <String>[r.label];
         if (includeMood) {
           row.add(r.mood == null ? '-' : r.mood!.toStringAsFixed(1));
@@ -918,12 +908,10 @@ class ClinicalReportService {
         }
         if (includeAdherence) {
           row.add(
-            r.adherencePct == null
-                ? '-'
-                : r.adherencePct!.toStringAsFixed(0),
+            r.adherencePct == null ? '-' : r.adherencePct!.toStringAsFixed(0),
           );
-          row.add('${r.taken}');
-          row.add('${r.missed}');
+          row.add(r.taken + r.missed == 0 ? '-' : '${r.taken}');
+          row.add(r.taken + r.missed == 0 ? '-' : '${r.missed}');
         }
         return row;
       }).toList(),
@@ -935,12 +923,82 @@ class ClinicalReportService {
       headerDecoration: const pw.BoxDecoration(
         color: PdfColor.fromInt(0xFF455A64),
       ),
-      cellStyle: const pw.TextStyle(fontSize: 7.5),
+      cellStyle: const pw.TextStyle(fontSize: 8),
       cellAlignment: pw.Alignment.centerLeft,
       border: pw.TableBorder.all(
         color: PdfColor.fromInt(0xFFCFD8DC),
         width: 0.35,
       ),
+    );
+  }
+
+  pw.Widget _seriesChart({
+    required String title,
+    required List<_DayRow> days,
+    required double Function(_DayRow) valueOf,
+    required PdfColor color,
+    required double maxY,
+  }) {
+    if (days.length < 2) {
+      return pw.Container(
+        padding: const pw.EdgeInsets.all(8),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColor.fromInt(0xFFCFD8DC)),
+        ),
+        child: pw.Text(
+          days.isEmpty
+              ? '$title ? no data points.'
+              : '$title ? need at least 2 points to chart '
+                  '(have ${days.first.label}: ${valueOf(days.first).toStringAsFixed(1)}).',
+          style: const pw.TextStyle(fontSize: 8),
+        ),
+      );
+    }
+
+    final labels = days.map((d) => d.label).toList();
+    final values = days.map(valueOf).toList();
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+      children: [
+        pw.Text(
+          title,
+          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+        ),
+        pw.SizedBox(height: 4),
+        pw.SizedBox(
+          height: 110,
+          child: pw.Chart(
+            grid: pw.CartesianGrid(
+              xAxis: pw.FixedAxis.fromStrings(
+                labels,
+                marginStart: 4,
+                marginEnd: 4,
+              ),
+              yAxis: pw.FixedAxis(
+                [
+                  0,
+                  maxY / 4,
+                  maxY / 2,
+                  maxY * 3 / 4,
+                  maxY,
+                ],
+                divisions: true,
+              ),
+            ),
+            datasets: [
+              pw.LineDataSet(
+                drawPoints: true,
+                color: color,
+                data: [
+                  for (var i = 0; i < values.length; i++)
+                    pw.PointChartValue(i.toDouble(), values[i]),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -966,42 +1024,44 @@ class ClinicalReportService {
 
   pw.Widget _dbtEntryBlock(DiaryEntryModel e) {
     return pw.Container(
-      margin: const pw.EdgeInsets.only(bottom: 6),
-      padding: const pw.EdgeInsets.all(7),
+      margin: const pw.EdgeInsets.only(bottom: 8),
+      padding: const pw.EdgeInsets.all(8),
       decoration: pw.BoxDecoration(
         border: pw.Border.all(
           color: PdfColor.fromInt(0xFFCFD8DC),
-          width: 0.4,
+          width: 0.45,
         ),
+        color: PdfColor.fromInt(0xFFFBFCFC),
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Text(
-            '${_fmtDateTime(e.createdAt)} | Mood ${e.mood} | Affect ${e.affectIntensity} | '
-            'Urge NSSI ${e.urgeNssi} / Substance ${e.urgeSubstance}',
-            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+            _fmtDateTime(e.createdAt),
+            style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
           ),
-          if (e.emotions.isNotEmpty)
-            pw.Text(
-              'Emotions: ${e.emotions.join(', ')}',
-              style: const pw.TextStyle(fontSize: 8),
-            ),
-          if (e.triggers.isNotEmpty)
-            pw.Text(
-              'Triggers: ${e.triggers.join(', ')}',
-              style: const pw.TextStyle(fontSize: 8),
-            ),
-          if (e.skills.isNotEmpty)
-            pw.Text(
-              'Skills: ${e.skills.join(', ')}',
-              style: const pw.TextStyle(fontSize: 8),
-            ),
-          if (e.notes.isNotEmpty)
-            pw.Text(
-              'Notes: ${e.notes}',
-              style: const pw.TextStyle(fontSize: 8),
-            ),
+          pw.SizedBox(height: 3),
+          pw.Text(
+            'Mood ${e.mood}/10 ? Affect ${e.affectIntensity}/10 ? '
+            'Urge NSSI ${e.urgeNssi}/10 ? Substance ${e.urgeSubstance}/10',
+            style: const pw.TextStyle(fontSize: 8),
+          ),
+          pw.Text(
+            'Emotions: ${e.emotions.isEmpty ? '-' : e.emotions.join(', ')}',
+            style: const pw.TextStyle(fontSize: 8),
+          ),
+          pw.Text(
+            'Triggers: ${e.triggers.isEmpty ? '-' : e.triggers.join(', ')}',
+            style: const pw.TextStyle(fontSize: 8),
+          ),
+          pw.Text(
+            'Skills: ${e.skills.isEmpty ? '-' : e.skills.join(', ')}',
+            style: const pw.TextStyle(fontSize: 8),
+          ),
+          pw.Text(
+            'Notes: ${e.notes.trim().isEmpty ? '-' : e.notes.trim()}',
+            style: const pw.TextStyle(fontSize: 8, lineSpacing: 1.25),
+          ),
         ],
       ),
     );
@@ -1108,4 +1168,12 @@ class _DayRow {
   final double? adherencePct;
   final int taken;
   final int missed;
+
+  bool get hasObservation =>
+      mood != null ||
+      affect != null ||
+      urge != null ||
+      adherencePct != null ||
+      taken > 0 ||
+      missed > 0;
 }

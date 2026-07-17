@@ -1,0 +1,39 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Backend: npm run dev",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/Backend"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "backend",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "Curamind API|listening|Local:|ready|3000"
+        }
+      }
+    },
+    {
+      "label": "Flutter: run chrome",
+      "type": "shell",
+      "command": "flutter run -d chrome",
+      "options": {
+        "cwd": "${workspaceFolder}/Frontend"
+      },
+      "dependsOn": ["Backend: npm run dev"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Curamind: backend + flutter chrome",
+      "dependsOn": ["Backend: npm run dev", "Flutter: run chrome"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    }
+  ]
+}

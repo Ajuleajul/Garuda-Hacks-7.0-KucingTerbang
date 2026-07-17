@@ -392,6 +392,62 @@ class _PatientEmotionCard extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: CuramindColors.mistBlue.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        summary.hasTodayDiary
+                            ? 'Today’s diary'
+                            : 'Today’s diary — not logged yet',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: CuramindColors.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _MetricCell(
+                              label: 'Mood',
+                              value: summary.todayMood == null
+                                  ? '—'
+                                  : summary.todayMood!.toStringAsFixed(0),
+                            ),
+                          ),
+                          Expanded(
+                            child: _MetricCell(
+                              label: 'Affect',
+                              value: summary.todayAffect == null
+                                  ? '—'
+                                  : summary.todayAffect!.toStringAsFixed(0),
+                            ),
+                          ),
+                          Expanded(
+                            child: _MetricCell(
+                              label: 'Urge',
+                              value: summary.todayPeakUrge?.toString() ?? '—',
+                            ),
+                          ),
+                          Expanded(
+                            child: _MetricCell(
+                              label: 'Entries',
+                              value: '${summary.todayDbt.length}',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
@@ -404,7 +460,7 @@ class _PatientEmotionCard extends StatelessWidget {
                     ),
                     Expanded(
                       child: _MetricCell(
-                        label: 'Affect',
+                        label: 'Affect 7d',
                         value: summary.avgAffect7d == null
                             ? '—'
                             : summary.avgAffect7d!.toStringAsFixed(1),

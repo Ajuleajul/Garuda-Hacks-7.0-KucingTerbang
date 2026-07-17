@@ -54,9 +54,22 @@ class _ClinicianHomePageState extends State<ClinicianHomePage> {
   int _missedToday = 0;
   List<_HomeAlert> _alerts = const [];
 
-  String get _firstName {
-    final parts = widget.displayName.trim().split(RegExp(r'\s+'));
-    return parts.isEmpty ? 'Doctor' : parts.first;
+  String get _greetingName {
+    final raw = widget.displayName.trim();
+    if (raw.isEmpty ||
+        raw.toLowerCase() == 'clinician' ||
+        raw.toLowerCase() == 'unknown' ||
+        raw.toLowerCase() == 'doctor') {
+      return 'Doctor';
+    }
+    final parts = raw.split(RegExp(r'\s+'));
+    final first = parts.first;
+    final lower = first.toLowerCase();
+    if (lower == 'dr' || lower == 'dr.' || lower.startsWith('dr.')) {
+      if (parts.length >= 2) return 'Dr. ${parts[1]}';
+      return 'Doctor';
+    }
+    return 'Dr. $first';
   }
 
   String get _greeting {
@@ -256,7 +269,7 @@ class _ClinicianHomePageState extends State<ClinicianHomePage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    '$_greeting, $_firstName',
+                    '$_greeting, $_greetingName',
                     style: GoogleFonts.fraunces(
                       fontSize: 28,
                       fontWeight: FontWeight.w600,

@@ -120,11 +120,35 @@ class _AuthGateState extends State<AuthGate> {
       return const AuthPage();
     }
 
-    final name = user.fullName.trim().isEmpty ? null : user.fullName.trim();
+    final name = _displayNameFor(user);
     if (user.isPsychiatrist) {
-      return ClinicianShell(displayName: name ?? 'Clinician');
+      return ClinicianShell(displayName: name);
     }
-    return PatientShell(displayName: name ?? 'Patient');
+    return PatientShell(displayName: name);
+  }
+
+  String _displayNameFor(AuthUser user) {
+    var name = user.fullName.trim();
+    if (name.isEmpty ||
+        name.toLowerCase() == 'unknown' ||
+        name.toLowerCase() == 'user') {
+      final email = user.email.trim();
+      if (email.contains('@')) {
+        final local = email.split('@').first;
+        name = local
+            .split(RegExp(r'[._\-]+'))
+            .where((p) => p.isNotEmpty)
+            .map(
+              (p) =>
+                  '${p[0].toUpperCase()}${p.substring(1).toLowerCase()}',
+            )
+            .join(' ');
+      }
+    }
+    if (name.isEmpty) {
+      return user.isPsychiatrist ? 'Clinician' : 'Patient';
+    }
+    return name;
   }
 }
 

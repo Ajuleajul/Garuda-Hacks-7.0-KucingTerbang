@@ -80,13 +80,21 @@ medsRouter.get("/clinician/:clinicianId/patients", async (req: Request, res: Res
 
 medsRouter.get("/clinician/:clinicianId", async (req: Request, res: Response) => {
   const clinicianId = String(req.params.clinicianId ?? "");
+  const key = dayKey();
   try {
     const meds = await prisma.medication.findMany({
       where: { psychiatrist_id: clinicianId },
       orderBy: { created_at: "desc" },
+      include: {
+        logs: {
+          where: { day_key: key },
+          take: 1,
+        },
+      },
     });
     return res.json({
-      medications: meds.map((m) => serializeMed(m)),
+      day_key: key,
+      medications: meds.map((m) => serializeMed(m, m.logs[0] ?? null)),
     });
   } catch (error) {
     console.error("List clinician meds error:", error);

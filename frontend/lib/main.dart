@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -6,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'pages/patient/AuthGate.dart';
 import 'services/auth_service.dart';
+import 'services/backend_bootstrap.dart';
 import 'services/reminder_service.dart';
 import 'theme/curamind_theme.dart';
 import 'animated_cursor.dart';
@@ -17,6 +21,12 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await dotenv.load(fileName: '.env');
+
+  if (!kIsWeb) {
+    await BackendBootstrap.ensureRunning();
+  } else {
+    unawaited(BackendBootstrap.ensureRunning());
+  }
 
   final supabaseUrl = dotenv.env['SUPABASE_URL']?.trim() ?? '';
   final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY']?.trim() ?? '';

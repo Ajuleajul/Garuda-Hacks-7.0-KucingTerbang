@@ -294,6 +294,69 @@ class _PatientDetailsPageState extends State<PatientDetailsPage> {
               ),
             ),
           ],
+          if (member.monitoringOn) ...[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: CuramindColors.mistBlue.withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: CuramindColors.mistBlue),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    s.hasTodayDiary
+                        ? 'Review today’s diary'
+                        : 'Today’s diary — waiting for patient entry',
+                    style: GoogleFonts.outfit(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: CuramindColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _StatCard(
+                          title: 'Mood',
+                          value: s.todayMood == null
+                              ? '—'
+                              : s.todayMood!.toStringAsFixed(0),
+                          hint: '/ 10',
+                          color: CuramindColors.ocean,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _StatCard(
+                          title: 'Affect',
+                          value: s.todayAffect == null
+                              ? '—'
+                              : s.todayAffect!.toStringAsFixed(0),
+                          hint: '/ 10',
+                          color: CuramindColors.slate,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _StatCard(
+                          title: 'Urge',
+                          value: s.todayPeakUrge?.toString() ?? '—',
+                          hint: '/ 10',
+                          color: (s.todayPeakUrge ?? 0) >= 7
+                              ? CuramindColors.danger
+                              : CuramindColors.sageDeep,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           Wrap(
             spacing: 8,
