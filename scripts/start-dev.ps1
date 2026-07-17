@@ -1,12 +1,12 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $backend = Join-Path $root "Backend"
-if (-not (Test-Path (Join-Path $backend "package.json"))) {
-  $backend = Join-Path $root "backend"
-}
 $frontend = Join-Path $root "Frontend"
+if (-not (Test-Path (Join-Path $backend "package.json"))) {
+  throw "Backend folder not found at $backend"
+}
 if (-not (Test-Path (Join-Path $frontend "pubspec.yaml"))) {
-  $frontend = Join-Path $root "frontend"
+  throw "Frontend folder not found at $frontend"
 }
 
 function Test-Backend {
