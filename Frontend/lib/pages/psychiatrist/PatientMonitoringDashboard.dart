@@ -126,6 +126,11 @@ class PatientMonitoringDashboard extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: CuramindColors.mist,
+      appBar: AppBar(
+        backgroundColor: CuramindColors.mist,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: CuramindColors.ink),
+      ),
       body: SafeArea(child: content),
     );
   }

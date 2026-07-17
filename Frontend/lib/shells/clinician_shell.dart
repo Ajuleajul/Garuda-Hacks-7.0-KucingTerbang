@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../pages/patient/AuthGate.dart';
 import '../pages/psychiatrist/HomePage.dart';
-import '../pages/psychiatrist/PatientMonitoringDashboard.dart';
+import '../pages/psychiatrist/MonitorClassesPage.dart';
 import '../pages/psychiatrist/ProfilePage.dart';
 import '../pages/psychiatrist/DualBivariateDashboard.dart';
 import '../pages/psychiatrist/ClinicianJoinCodesPage.dart';
@@ -63,7 +63,7 @@ class _ClinicianShellState extends State<ClinicianShell> {
         onNavigate: _go,
       ),
       const ClinicianJoinCodesPage(embedded: true),
-      const PatientMonitoringDashboard(embedded: true),
+      const MonitorClassesPage(embedded: true),
       const DualBivariateDashboard(embedded: true),
       MedicationManagementPage(embedded: true, active: _index == 4),
       const ExportClinicalReportPage(embedded: true),
